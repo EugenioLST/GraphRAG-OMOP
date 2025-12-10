@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(mkdir:*)",
+      "Bash(tree:*)",
+      "SlashCommand(/plan_feature)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
