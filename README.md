@@ -106,8 +106,14 @@ The `graph.py` module builds a NetworkX MultiDiGraph:
 ```python
 from graph import load_graph, get_concept_info, get_neighbors
 
-# Load the graph
+# Load the graph (automatically uses cache if available)
 G = load_graph()
+
+# Force rebuild from CSVs (ignores cache)
+G = load_graph(force_rebuild=True)
+
+# Load without using cache
+G = load_graph(use_cache=False)
 
 # Get concept information
 info = get_concept_info(G, concept_id=1503297)
@@ -120,6 +126,8 @@ neighbors = get_neighbors(G, concept_id=1503297, max_neighbors=5)
 for neighbor in neighbors:
     print(f"{neighbor['relationship']}: {neighbor.get('target_name', neighbor.get('source_name'))}")
 ```
+
+**Performance Note:** The graph is automatically cached as `omop_graph.pkl` after the first build. Subsequent loads are ~100x faster (seconds instead of minutes). The cache is automatically used on subsequent runs.
 
 ## Testing
 

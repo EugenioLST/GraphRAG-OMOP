@@ -16,12 +16,14 @@ Output:
 from pathlib import Path
 import pandas as pd
 import networkx as nx
+import pickle
 from typing import Optional
 
 
 # File paths
 NODES_FILE = Path('nodes.csv')
 EDGES_FILE = Path('edges.csv')
+CACHE_FILE = Path('omop_graph.pkl')
 
 
 def validate_graph_files() -> None:
@@ -49,7 +51,18 @@ def load_nodes() -> pd.DataFrame:
         DataFrame with concept node data
     """
     print(f"Loading {NODES_FILE}...")
-    df = pd.read_csv(NODES_FILE, dtype={'concept_id': 'int32'})
+    # Fix: Specify dtypes to avoid mixed type warnings
+    df = pd.read_csv(
+        NODES_FILE, 
+        dtype={
+            'concept_id': 'int32',
+            'concept_name': 'str',
+            'vocabulary_id': 'str',
+            'domain_id': 'str', 
+            'standard_concept': 'str'  # Column 4 with mixed types
+        },
+        low_memory=False
+    )
     print(f"  Loaded {len(df):,} nodes")
     return df
 
@@ -251,9 +264,16 @@ def find_standard_mapping(G: nx.MultiDiGraph, concept_id: int) -> Optional[dict]
     return None
 
 
-def load_graph() -> nx.MultiDiGraph:
+def load_graph(use_cache: bool = True, force_rebuild: bool = False) -> nx.MultiDiGraph:
     """
     Load and build the complete OMOP graph.
+
+    Uses pickle cache to avoid rebuilding from CSVs every time.
+    Cache is automatically created after first build.
+
+    Args:
+        use_cache: If True, use cached graph if available (default: True)
+        force_rebuild: If True, rebuild from CSVs even if cache exists (default: False)
 
     Returns:
         NetworkX MultiDiGraph ready for querying
@@ -261,6 +281,40 @@ def load_graph() -> nx.MultiDiGraph:
     print("=" * 60)
     print("Loading OMOP Graph")
     print("=" * 60)
+
+    # Check if cache exists and should be used
+    if use_cache and CACHE_FILE.exists() and not force_rebuild:
+        print(f"\n[CACHE] Loading graph from {CACHE_FILE}...")
+        try:
+            with open(CACHE_FILE, 'rb') as f:
+                G = pickle.load(f)
+
+            print(f"[CACHE] Graph loaded successfully!")
+            print()
+
+            # Statistics
+            print("=" * 60)
+            print("Graph Statistics")
+            print("=" * 60)
+            print(f"Nodes: {G.number_of_nodes():,}")
+            print(f"Edges: {G.number_of_edges():,}")
+            print(f"Density: {nx.density(G):.6f}")
+            print(f"Is directed: {G.is_directed()}")
+            print(f"Is multigraph: {G.is_multigraph()}")
+            print("=" * 60)
+
+            return G
+
+        except Exception as e:
+            print(f"[WARNING] Failed to load cache: {e}")
+            print("[INFO] Rebuilding from CSVs...")
+
+    # Build from CSVs (no cache or forced rebuild)
+    if force_rebuild:
+        print("\n[INFO] Force rebuild requested, building from CSVs...")
+    else:
+        print("\n[INFO] No cache found, building from CSVs...")
+    print()
 
     # Validate files
     validate_graph_files()
@@ -275,6 +329,19 @@ def load_graph() -> nx.MultiDiGraph:
     G = build_graph(nodes_df, edges_df)
     print()
 
+    # Save to cache
+    if use_cache:
+        print(f"[CACHE] Saving graph to {CACHE_FILE}...")
+        try:
+            with open(CACHE_FILE, 'wb') as f:
+                pickle.dump(G, f)
+
+            cache_size_mb = CACHE_FILE.stat().st_size / (1024 * 1024)
+            print(f"[CACHE] Graph saved successfully ({cache_size_mb:.1f} MB)")
+        except Exception as e:
+            print(f"[WARNING] Failed to save cache: {e}")
+    print()
+
     # Statistics
     print("=" * 60)
     print("Graph Statistics")
@@ -287,6 +354,18 @@ def load_graph() -> nx.MultiDiGraph:
     print("=" * 60)
 
     return G
+
+
+def clear_cache() -> None:
+    """
+    Delete the cached graph file.
+    Use this when you've updated the source CSVs and need to rebuild.
+    """
+    if CACHE_FILE.exists():
+        CACHE_FILE.unlink()
+        print(f"[CACHE] Deleted {CACHE_FILE}")
+    else:
+        print(f"[CACHE] No cache file found")
 
 
 if __name__ == '__main__':

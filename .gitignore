@@ -1,5 +1,8 @@
 # large files
 data/
+nodes.csv
+edges.csv
+omop_graph.pkl
 
 
 # Byte-compiled / optimized / DLL files

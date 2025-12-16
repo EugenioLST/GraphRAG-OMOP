@@ -34,22 +34,36 @@ RELEVANT_VOCABULARIES = {'SNOMED', 'RxNorm', 'LOINC', 'RxNorm Extension'}
 # Relationships whitelist - focusing on mapping and key medical relationships
 # Reason: These are the most relevant for mapping non-standard -> standard terms
 RELEVANT_RELATIONSHIPS = {
-    'Maps to',                # Critical: non-standard -> standard
-    'Mapped from',            # Inverse of Maps to
-    'Is a',                   # Hierarchies
-    'Subsumes',
-    'RxNorm is a',
-    'RxNorm inverse is a',
-    'RxNorm has ing',         # Drug ingredients
-    'RxNorm ing of',
-    'Has form',               # Drug forms
-    'Form of',
-    'RxNorm has dose form',
-    'RxNorm dose form of',
-    'Contains',               # Composition
-    'Contained in',
-    'Has tradename',          # Brand names
-    'Tradename of',
+    # Core hierarchies (confirmed available)
+    'Is a',                           # Hierarchical relationships
+    'Subsumes',                       # Reverse hierarchy
+    
+    # Standard mapping relationships (using actual names from CSV)
+    'Concept replaced by',            # Non-standard -> standard mapping
+    'Concept replaces',               # Standard -> non-standard mapping  
+    'Non-standard to Standard map (OMOP)',  # OMOP standard mappings
+    'Standard to Non-standard map (OMOP)',  # Reverse mappings
+    
+    # RxNorm relationships (using actual names)
+    'Is a (RxNorm)',                  # RxNorm hierarchies
+    'Inverse is a (RxNorm)',          # Reverse RxNorm hierarchy
+    'Has ingredient (RxNorm)',        # Drug ingredients
+    'Ingredient of (RxNorm)',         # Reverse ingredient
+    'Has form (RxNorm)',              # Drug forms
+    'Form of (RxNorm)',               # Reverse forms
+    'Has dose form (RxNorm)',         # Dose forms
+    'Dose form of (RxNorm)',          # Reverse dose forms
+    'Contains (RxNorm)',              # Composition
+    'Consists of (RxNorm)',           # Alternative composition
+    'Constitutes (RxNorm)',           # Reverse composition
+    'Has tradename (RxNorm)',         # Brand names
+    'Tradename of (RxNorm)',          # Reverse tradenames
+    
+    # SNOMED relationships
+    'Has active ingredient (SNOMED)', # Active ingredients
+    'Active ingredient of (SNOMED)',  # Reverse active ingredients
+    'Has basic dose form (SNOMED)',   # Basic dose forms
+    'Basic dose form of (SNOMED)',    # Reverse dose forms
 }
 
 # Chunk size for processing large files
@@ -89,12 +103,19 @@ def load_concept_data() -> pd.DataFrame:
     print(f"Loading {CONCEPT_FILE.name}...")
 
     try:
-        # Try tab-separated first
+        # Try tab-separated first - Fix: Add low_memory=False and specify dtypes
         df = pd.read_csv(
             CONCEPT_FILE,
             sep='\t',
             usecols=['concept_id', 'concept_name', 'vocabulary_id', 'domain_id', 'standard_concept'],
-            dtype={'concept_id': 'int32'},
+            dtype={
+                'concept_id': 'int32',
+                'concept_name': 'str',
+                'vocabulary_id': 'str', 
+                'domain_id': 'str',
+                'standard_concept': 'str'
+            },
+            low_memory=False,
             on_bad_lines='skip'
         )
     except ValueError:
@@ -102,7 +123,14 @@ def load_concept_data() -> pd.DataFrame:
         df = pd.read_csv(
             CONCEPT_FILE,
             usecols=['concept_id', 'concept_name', 'vocabulary_id', 'domain_id', 'standard_concept'],
-            dtype={'concept_id': 'int32'},
+            dtype={
+                'concept_id': 'int32',
+                'concept_name': 'str',
+                'vocabulary_id': 'str',
+                'domain_id': 'str', 
+                'standard_concept': 'str'
+            },
+            low_memory=False,
             on_bad_lines='skip'
         )
 
@@ -216,6 +244,7 @@ def load_concept_relationships(
 
         if len(filtered) > 0:
             # Map relationship_id to relationship_name
+            filtered = filtered.copy()  # Fix SettingWithCopyWarning
             filtered['relationship_name'] = filtered['relationship_id'].map(relationship_mapping)
             filtered = filtered.drop(columns=['relationship_id'])
             chunks.append(filtered)
