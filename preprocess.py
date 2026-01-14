@@ -89,9 +89,12 @@ def validate_input_files() -> None:
     print("[OK] All required OMOP files found")
 
 
-def load_concept_data() -> pd.DataFrame:
+def load_concept_data(nrows: int = None) -> pd.DataFrame:
     """
     Load and filter CONCEPT.csv.
+
+    Args:
+        nrows: Optional limit on number of rows to read (for testing). None = read all.
 
     Filters:
         - Only SNOMED, RxNorm, LOINC vocabularies
@@ -101,6 +104,8 @@ def load_concept_data() -> pd.DataFrame:
         DataFrame with columns: concept_id, concept_name, vocabulary_id, domain_id, standard_concept
     """
     print(f"Loading {CONCEPT_FILE.name}...")
+    if nrows:
+        print(f"  [TEST MODE] Limiting to first {nrows:,} rows")
 
     try:
         # Try tab-separated first - Fix: Add low_memory=False and specify dtypes
@@ -111,12 +116,13 @@ def load_concept_data() -> pd.DataFrame:
             dtype={
                 'concept_id': 'int32',
                 'concept_name': 'str',
-                'vocabulary_id': 'str', 
+                'vocabulary_id': 'str',
                 'domain_id': 'str',
                 'standard_concept': 'str'
             },
             low_memory=False,
-            on_bad_lines='skip'
+            on_bad_lines='skip',
+            nrows=nrows
         )
     except ValueError:
         # Fallback to comma-separated
@@ -127,11 +133,12 @@ def load_concept_data() -> pd.DataFrame:
                 'concept_id': 'int32',
                 'concept_name': 'str',
                 'vocabulary_id': 'str',
-                'domain_id': 'str', 
+                'domain_id': 'str',
                 'standard_concept': 'str'
             },
             low_memory=False,
-            on_bad_lines='skip'
+            on_bad_lines='skip',
+            nrows=nrows
         )
 
     print(f"  Loaded {len(df):,} concepts")
@@ -146,6 +153,9 @@ def load_concept_data() -> pd.DataFrame:
     removed = initial_count - len(df)
     if removed > 0:
         print(f"  Removed {removed:,} concepts with null names")
+
+    # Ensure column order is consistent (fix for test compatibility)
+    df = df[['concept_id', 'concept_name', 'vocabulary_id', 'domain_id', 'standard_concept']]
 
     return df
 
@@ -190,7 +200,8 @@ def load_relationship_mapping() -> dict:
 
 def load_concept_relationships(
     valid_concept_ids: set,
-    relationship_mapping: dict
+    relationship_mapping: dict,
+    nrows: int = None
 ) -> pd.DataFrame:
     """
     Load CONCEPT_RELATIONSHIP.csv with filtering.
@@ -199,11 +210,14 @@ def load_concept_relationships(
     Args:
         valid_concept_ids: Set of concept_ids from filtered CONCEPT.csv
         relationship_mapping: Dict of relationship_id -> relationship_name
+        nrows: Optional limit on number of rows to read (for testing). None = read all.
 
     Returns:
         DataFrame with columns: concept_id_1, relationship_name, concept_id_2
     """
     print(f"Loading {CONCEPT_RELATIONSHIP_FILE.name} (processing in chunks)...")
+    if nrows:
+        print(f"  [TEST MODE] Limiting to first {nrows:,} rows")
 
     valid_relationship_ids = set(relationship_mapping.keys())
     chunks = []
@@ -218,7 +232,8 @@ def load_concept_relationships(
             usecols=['concept_id_1', 'concept_id_2', 'relationship_id'],
             dtype={'concept_id_1': 'int32', 'concept_id_2': 'int32'},
             chunksize=CHUNK_SIZE,
-            on_bad_lines='skip'
+            on_bad_lines='skip',
+            nrows=nrows
         )
     except ValueError:
         # Fallback to comma-separated
@@ -227,7 +242,8 @@ def load_concept_relationships(
             usecols=['concept_id_1', 'concept_id_2', 'relationship_id'],
             dtype={'concept_id_1': 'int32', 'concept_id_2': 'int32'},
             chunksize=CHUNK_SIZE,
-            on_bad_lines='skip'
+            on_bad_lines='skip',
+            nrows=nrows
         )
 
     for i, chunk in enumerate(reader, 1):
@@ -247,6 +263,8 @@ def load_concept_relationships(
             filtered = filtered.copy()  # Fix SettingWithCopyWarning
             filtered['relationship_name'] = filtered['relationship_id'].map(relationship_mapping)
             filtered = filtered.drop(columns=['relationship_id'])
+            # Ensure column order is consistent (fix for test compatibility)
+            filtered = filtered[['concept_id_1', 'relationship_name', 'concept_id_2']]
             chunks.append(filtered)
 
         if i % 10 == 0:
@@ -265,9 +283,13 @@ def load_concept_relationships(
     return edges_df
 
 
-def preprocess() -> Tuple[pd.DataFrame, pd.DataFrame]:
+def preprocess(nrows_concepts: int = None, nrows_relationships: int = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Main preprocessing pipeline.
+
+    Args:
+        nrows_concepts: Optional limit on CONCEPT.csv rows (for testing). None = read all.
+        nrows_relationships: Optional limit on CONCEPT_RELATIONSHIP.csv rows (for testing). None = read all.
 
     Steps:
         1. Validate input files exist
@@ -281,6 +303,8 @@ def preprocess() -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     print("=" * 60)
     print("OMOP Preprocessing Pipeline")
+    if nrows_concepts or nrows_relationships:
+        print("[TEST MODE - LIMITED ROWS]")
     print("=" * 60)
 
     # Step 1: Validate
@@ -288,7 +312,7 @@ def preprocess() -> Tuple[pd.DataFrame, pd.DataFrame]:
     print()
 
     # Step 2: Load concepts
-    nodes_df = load_concept_data()
+    nodes_df = load_concept_data(nrows=nrows_concepts)
     print()
 
     # Step 3: Load relationship mapping
@@ -297,7 +321,7 @@ def preprocess() -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     # Step 4: Load concept relationships
     valid_concept_ids = set(nodes_df['concept_id'].values)
-    edges_df = load_concept_relationships(valid_concept_ids, relationship_mapping)
+    edges_df = load_concept_relationships(valid_concept_ids, relationship_mapping, nrows=nrows_relationships)
     print()
 
     # Step 5: Save output files
@@ -333,8 +357,20 @@ def preprocess() -> Tuple[pd.DataFrame, pd.DataFrame]:
 
 if __name__ == '__main__':
     # Run preprocessing
+    # For testing with limited data, uncomment and adjust these values:
+    # Small test: 100k concepts, 2M relationships (~2-3 minutes)
+    # Medium test: 500k concepts, 10M relationships (~10-15 minutes)
+    # Full: None, None (~55+ minutes)
+
+    # Current mode - FULL DATASET (complete graph with all relationships)
+    TEST_CONCEPTS = None              # None = ALL concepts (~3.8M after filtering)
+    TEST_RELATIONSHIPS = None         # None = ALL relationships (~17M after filtering)
+
     try:
-        nodes_df, edges_df = preprocess()
+        nodes_df, edges_df = preprocess(
+            nrows_concepts=TEST_CONCEPTS,
+            nrows_relationships=TEST_RELATIONSHIPS
+        )
         print("\n[SUCCESS] Preprocessing successful!")
     except Exception as e:
         print(f"\n[ERROR] Preprocessing failed: {e}")

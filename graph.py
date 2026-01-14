@@ -231,20 +231,27 @@ def find_standard_mapping(G: nx.MultiDiGraph, concept_id: int) -> Optional[dict]
     if node_data.get('standard_concept') == 'S':
         return get_concept_info(G, concept_id)
 
-    # Follow "Maps to" relationships to find standard concept
-    # Reason: Non-standard concepts map to standard via "Maps to" relationship
+    # Follow mapping relationships to find standard concept
+    # Reason: Non-standard concepts map to standard via mapping relationships
+    # Note: OMOP uses "Non-standard to Standard map (OMOP)" instead of "Maps to"
+    MAPPING_RELATIONSHIPS = {
+        'Maps to',
+        'Non-standard to Standard map (OMOP)',
+        'Concept replaced by'
+    }
+
     visited = set()  # Avoid infinite loops
     current_id = concept_id
 
     while current_id not in visited:
         visited.add(current_id)
 
-        # Look for outgoing "Maps to" edges
+        # Look for outgoing mapping edges
         found_mapping = False
         for target_id in G.successors(current_id):
             edges = G.get_edge_data(current_id, target_id)
             for edge_key, edge_data in edges.items():
-                if edge_data.get('relationship') == 'Maps to':
+                if edge_data.get('relationship') in MAPPING_RELATIONSHIPS:
                     target_data = G.nodes[target_id]
                     # Check if target is standard
                     if target_data.get('standard_concept') == 'S':
@@ -258,7 +265,7 @@ def find_standard_mapping(G: nx.MultiDiGraph, concept_id: int) -> Optional[dict]
                 break
 
         if not found_mapping:
-            # No more "Maps to" edges, mapping not found
+            # No more mapping edges, mapping not found
             break
 
     return None
