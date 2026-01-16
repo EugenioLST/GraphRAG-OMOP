@@ -1,5 +1,8 @@
 # GraphRAG-OMOP: Proof of Concept for Medical Concept Linking
 
+**Author:** Adolfo Viguera Varea
+**Created:** January 2026
+
 A Proof of Concept system that converts medical terms into standardized OMOP concept IDs and retrieves their relationships using embeddings and graph traversal.
 
 ## Overview
@@ -15,21 +18,33 @@ This project implements a GraphRAG (Graph-based Retrieval Augmented Generation) 
 
 ```
 GraphRAG-OMOP/
-├── data/                     # OMOP CSV files (user-provided)
-│   ├── CONCEPT.csv
-│   ├── CONCEPT_RELATIONSHIP.csv
-│   └── RELATIONSHIP.csv
-├── tests/                    # Pytest unit tests
-│   ├── test_preprocess.py
-│   └── test_graph.py
+├── src/                      # Source code
+│   ├── preprocess.py        # Phase 1: CSV preprocessing pipeline
+│   ├── graph.py             # Phase 1: NetworkX graph construction
+│   ├── embeddings.py        # Phase 2: SapBERT embedding generation
+│   └── retrieve.py          # Phase 2: Semantic search engine
+├── data/                     # Data files (generated + source)
+│   ├── CONCEPT.csv          # OMOP source (user-provided)
+│   ├── CONCEPT_RELATIONSHIP.csv  # OMOP source (user-provided)
+│   ├── RELATIONSHIP.csv     # OMOP source (user-provided)
+│   ├── nodes.csv            # Processed concepts (generated)
+│   ├── edges.csv            # Processed relationships (generated)
+│   ├── omop_graph.pkl       # NetworkX graph cache (generated)
+│   ├── embeddings.npy       # SapBERT embeddings (generated)
+│   └── concept_id_to_index.pkl  # Embedding index (generated)
+├── tests/                    # Unit & integration tests
+│   ├── test_preprocess.py   # Phase 1 preprocessing tests
+│   ├── test_graph.py        # Phase 1 graph tests
+│   ├── test_embeddings_basic.py  # Phase 2 embedding tests
+│   └── test_retrieve_quick.py    # Phase 2 retrieval tests
+├── scripts/                  # Validation & utility scripts
+│   ├── validate_poc.py      # Phase 1 validation
+│   ├── validate_setup.py    # Setup validation
+│   └── debug_relationships.py  # Debugging tool
 ├── context/                  # Project documentation
-│   ├── Context.md           # Domain context
-│   ├── PRD.md               # Product requirements
-│   └── TASKS.md             # Task tracking
-├── preprocess.py            # CSV preprocessing pipeline
-├── graph.py                 # NetworkX graph construction
-├── nodes.csv                # Processed concept nodes (generated)
-├── edges.csv                # Processed relationships (generated)
+│   ├── PHASE1_COMPLETE.md   # Phase 1 completion report
+│   ├── PHASE2_PLAN.md       # Phase 2 implementation plan
+│   └── ARCHITECTURE.md      # System architecture
 ├── requirements.txt         # Python dependencies
 └── README.md               # This file
 ```
@@ -63,6 +78,7 @@ python preprocess.py
 ```
 
 This will:
+
 - Extract relevant columns from OMOP files
 - Translate relationship IDs to human-readable names
 - Create simplified CSV files for graph construction
@@ -91,11 +107,13 @@ nodes_df, edges_df = preprocess()
 ```
 
 **Input:**
+
 - `data/CONCEPT.csv`
 - `data/CONCEPT_RELATIONSHIP.csv`
 - `data/RELATIONSHIP.csv`
 
 **Output:**
+
 - `nodes.csv` - Concepts with: concept_id, concept_name, vocabulary_id, domain_id
 - `edges.csv` - Relationships with: concept_id_1, relationship_name, concept_id_2
 

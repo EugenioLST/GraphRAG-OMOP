@@ -18,7 +18,7 @@ For each term:
 import sys
 import pandas as pd
 import networkx as nx
-from graph import load_graph, get_concept_info, get_neighbors, find_standard_mapping
+from src.graph import load_graph, get_concept_info, get_neighbors, find_standard_mapping
 
 # Fix Windows console encoding for emojis
 if sys.platform == 'win32':
