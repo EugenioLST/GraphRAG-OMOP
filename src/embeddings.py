@@ -9,12 +9,11 @@ Key Features:
 - Batch processing with progress bars
 - Support for subset testing (max_concepts parameter)
 - Caching for fast subsequent loads
-- CPU-only support (no GPU required)
+- GPU acceleration (CUDA) with automatic fallback to CPU
 
-Performance Estimates (CPU):
-- 10k concepts: ~1-2 minutes
-- 100k concepts: ~10-15 minutes
-- 3.8M concepts: ~4-8 hours
+Performance Estimates:
+- GPU (CUDA): 10k concepts: ~30s | 100k: ~5min | 3.8M: ~45-60min
+- CPU: 10k concepts: ~1-2min | 100k: ~10-15min | 3.8M: ~4-8hours
 
 Output:
 - embeddings.npy: numpy array (N x 768 dimensions)
@@ -26,6 +25,7 @@ import sys
 import pickle
 import numpy as np
 import pandas as pd
+import torch
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 
@@ -48,35 +48,64 @@ def load_sapbert_model():
     Returns:
         SentenceTransformer: Loaded model ready for encoding
     """
-    print("Loading SapBERT model...")
+    print("\n" + "=" * 70)
+    print("LOADING SAPBERT MODEL")
+    print("=" * 70)
     print("Model: cambridgeltl/SapBERT-from-PubMedBERT-fulltext")
-    print("This may take a few minutes on first run (downloads ~440 MB)")
+    print("This may take a few minutes on first run (downloads ~440 MB)\n")
 
-    # Load model (will use CPU automatically if CUDA not available)
-    model = SentenceTransformer('cambridgeltl/SapBERT-from-PubMedBERT-fulltext')
+    # Detect available device
+    if torch.cuda.is_available():
+        device = 'cuda'
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
+        print(f"🚀 GPU DETECTED: {gpu_name}")
+        print(f"   VRAM: {gpu_memory:.1f} GB")
+        print(f"   CUDA Version: {torch.version.cuda}")
+    else:
+        device = 'cpu'
+        print("⚠️  GPU NOT AVAILABLE - Using CPU")
+        print("   To enable GPU acceleration:")
+        print("   pip install torch --index-url https://download.pytorch.org/whl/cu124")
 
-    # Check device
-    device = model.device
-    print(f"✓ Model loaded on device: {device}")
+    print(f"\n🔧 Loading model on device: {device.upper()}")
+
+    # Load model with explicit device
+    model = SentenceTransformer('cambridgeltl/SapBERT-from-PubMedBERT-fulltext', device=device)
+
+    print(f"✅ Model loaded successfully on: {model.device}")
+    print("=" * 70 + "\n")
 
     return model
 
 
-def generate_embeddings(model, concept_names, batch_size=256, show_progress=True):
+def generate_embeddings(model, concept_names, batch_size=None, show_progress=True):
     """
     Generate embeddings for a list of concept names.
 
     Args:
         model: SentenceTransformer model
         concept_names: List of concept name strings
-        batch_size: Number of concepts to process at once (default: 256)
+        batch_size: Number of concepts to process at once (default: auto-detect based on device)
         show_progress: Show progress bar (default: True)
 
     Returns:
         numpy.ndarray: Array of shape (N, 768) with embeddings
     """
-    print(f"\nGenerating embeddings for {len(concept_names):,} concepts...")
+    # Auto-detect optimal batch size based on device
+    if batch_size is None:
+        # Conservative batch size works well for both GPU and CPU
+        batch_size = 256
+
+    print("\n" + "=" * 70)
+    print("GENERATING EMBEDDINGS")
+    print("=" * 70)
+    print(f"Total concepts: {len(concept_names):,}")
+    print(f"Device: {model.device}")
     print(f"Batch size: {batch_size}")
+
+    if torch.cuda.is_available():
+        print(f"GPU Memory before: {torch.cuda.memory_allocated(0) / 1024**2:.1f} MB")
 
     # Encode in batches with progress bar
     embeddings = model.encode(
@@ -87,7 +116,13 @@ def generate_embeddings(model, concept_names, batch_size=256, show_progress=True
         normalize_embeddings=False  # We'll use raw embeddings for cosine similarity
     )
 
-    print(f"✓ Generated embeddings: shape {embeddings.shape}")
+    print(f"\n✅ Generated embeddings: shape {embeddings.shape}")
+
+    if torch.cuda.is_available():
+        print(f"   GPU Memory after: {torch.cuda.memory_allocated(0) / 1024**2:.1f} MB")
+        print(f"   GPU Memory peak: {torch.cuda.max_memory_allocated(0) / 1024**2:.1f} MB")
+
+    print("=" * 70 + "\n")
 
     return embeddings
 
@@ -145,11 +180,11 @@ def build_embedding_index(nodes_csv_path='data/nodes.csv', output_dir='data', ma
     # Load SapBERT model
     model = load_sapbert_model()
 
-    # Generate embeddings
+    # Generate embeddings (batch_size=None triggers auto-detection: 512 for GPU, 256 for CPU)
     embeddings = generate_embeddings(
         model=model,
         concept_names=concept_names,
-        batch_size=256,
+        batch_size=None,  # Auto-detect optimal batch size based on device
         show_progress=True
     )
 
@@ -157,21 +192,28 @@ def build_embedding_index(nodes_csv_path='data/nodes.csv', output_dir='data', ma
     embeddings_path = os.path.join(output_dir, 'embeddings.npy')
     mapping_path = os.path.join(output_dir, 'concept_id_to_index.pkl')
 
-    print(f"\nSaving embeddings to: {embeddings_path}")
+    print("\n" + "=" * 70)
+    print("SAVING TO DISK")
+    print("=" * 70)
+    print(f"Saving embeddings to: {embeddings_path}")
+    print(f"(This may take a few minutes for large files...)")
     np.save(embeddings_path, embeddings)
+    print("✓ Embeddings saved")
 
-    print(f"Saving mapping to: {mapping_path}")
+    print(f"\nSaving mapping to: {mapping_path}")
     with open(mapping_path, 'wb') as f:
         pickle.dump(concept_id_to_index, f)
+    print("✓ Mapping saved")
 
     # Calculate file sizes
     embeddings_size_mb = os.path.getsize(embeddings_path) / (1024 * 1024)
     mapping_size_mb = os.path.getsize(mapping_path) / (1024 * 1024)
 
-    print(f"\n✓ Embedding index built successfully!")
-    print(f"  Embeddings: {embeddings_size_mb:.1f} MB")
-    print(f"  Mapping: {mapping_size_mb:.1f} MB")
-    print(f"  Total: {embeddings_size_mb + mapping_size_mb:.1f} MB")
+    print(f"\n✅ Embedding index built successfully!")
+    print(f"  Embeddings file: {embeddings_size_mb:.1f} MB")
+    print(f"  Mapping file: {mapping_size_mb:.1f} MB")
+    print(f"  Total disk usage: {embeddings_size_mb + mapping_size_mb:.1f} MB")
+    print("=" * 70)
 
     return embeddings, concept_id_to_index
 
