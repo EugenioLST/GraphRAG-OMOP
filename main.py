@@ -20,7 +20,7 @@ from pathlib import Path
 # Add src directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.retrieve import SemanticRetriever
+from src.phase2.retrieve import SemanticRetriever
 
 # Fix Windows console encoding
 if sys.platform == 'win32':

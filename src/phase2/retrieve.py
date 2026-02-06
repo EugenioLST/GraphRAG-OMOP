@@ -31,8 +31,8 @@ from sentence_transformers import SentenceTransformer
 # Add parent directory to path for imports when running as script
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.embeddings import load_embeddings
-from src.graph import load_graph
+from src.phase2.embeddings import load_embeddings
+from src.phase2.graph import load_graph
 
 # Fix Windows console encoding
 if sys.platform == 'win32':
