@@ -52,6 +52,27 @@ EXTRACTION_SYSTEM_PROMPT = """You are a medical NLP system that extracts clinica
 4. If a procedure produces a measurement, you can extract BOTH
 5. Do NOT invent information not in the text
 6. For medications, extract the drug name, not the therapeutic class
+7. For measurements with values, extract: concept name, numeric value, and unit separately
+8. For drugs with doses, extract: drug name, dose value, and unit separately
 
-EXTRACT ENTITIES ACCORDING TO THESE SCHEMA REQUIREMENTS: {format_instructions}
+## Value and Unit Extraction
+
+When values are present, extract them separately:
+
+| Text | concept | value | unit |
+|------|---------|-------|------|
+| "BP 150/90 mmHg" | "systolic blood pressure" | 150 | "mmHg" |
+| "BP 150/90 mmHg" | "diastolic blood pressure" | 90 | "mmHg" |
+| "metformin 1000mg" | "metformin" | 1000 | "mg" |
+| "glucose 120 mg/dL" | "blood glucose" | 120 | "mg/dL" |
+| "diabetes" | "diabetes" | null | null |
+| "hypertension" | "hypertension" | null | null |
+
+## Clinical Text to Analyze
+
+{clinical_text}
+
+## Output Format
+
+{format_instructions}
 """

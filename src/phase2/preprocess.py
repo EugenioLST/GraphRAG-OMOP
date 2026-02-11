@@ -5,9 +5,9 @@ Processes raw OMOP vocabulary files and generates simplified nodes/edges for gra
 Filters to keep only relevant vocabularies (SNOMED, RxNorm, LOINC) and relationships.
 
 Input:
-    - data/CONCEPT.csv (565 MB)
-    - data/RELATIONSHIP.csv (53 KB)
-    - data/CONCEPT_RELATIONSHIP.csv (1.7 GB)
+    - data/source/CONCEPT.csv (565 MB)
+    - data/source/RELATIONSHIP.csv (53 KB)
+    - data/source/CONCEPT_RELATIONSHIP.csv (1.7 GB)
 
 Output:
     - nodes.csv: concept_id, concept_name, vocabulary_id, domain_id, standard_concept
@@ -20,13 +20,14 @@ from typing import Tuple
 
 
 # File paths
-DATA_DIR = Path('data')
-CONCEPT_FILE = DATA_DIR / 'CONCEPT.csv'
-RELATIONSHIP_FILE = DATA_DIR / 'RELATIONSHIP.csv'
-CONCEPT_RELATIONSHIP_FILE = DATA_DIR / 'CONCEPT_RELATIONSHIP.csv'
+SOURCE_DIR = Path('data/source')
+CONCEPT_FILE = SOURCE_DIR / 'CONCEPT.csv'
+RELATIONSHIP_FILE = SOURCE_DIR / 'RELATIONSHIP.csv'
+CONCEPT_RELATIONSHIP_FILE = SOURCE_DIR / 'CONCEPT_RELATIONSHIP.csv'
 
-OUTPUT_NODES = Path('nodes.csv')
-OUTPUT_EDGES = Path('edges.csv')
+OUTPUT_DIR = Path('data/processed')
+OUTPUT_NODES = OUTPUT_DIR / 'nodes.csv'
+OUTPUT_EDGES = OUTPUT_DIR / 'edges.csv'
 
 # Vocabularies to keep
 RELEVANT_VOCABULARIES = {'SNOMED', 'RxNorm', 'LOINC', 'RxNorm Extension'}
@@ -83,7 +84,7 @@ def validate_input_files() -> None:
     if missing_files:
         missing_names = [f.name for f in missing_files]
         raise FileNotFoundError(
-            f"Missing required OMOP files in {DATA_DIR}/: {missing_names}"
+            f"Missing required OMOP files in {SOURCE_DIR}/: {missing_names}"
         )
 
     print("[OK] All required OMOP files found")

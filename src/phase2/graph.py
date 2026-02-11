@@ -21,9 +21,9 @@ from typing import Optional
 
 
 # File paths
-NODES_FILE = Path('data/nodes.csv')
-EDGES_FILE = Path('data/edges.csv')
-CACHE_FILE = Path('data/omop_graph.pkl')
+NODES_FILE = Path('data/processed/nodes.csv')
+EDGES_FILE = Path('data/processed/edges.csv')
+CACHE_FILE = Path('data/processed/omop_graph.pkl')
 
 
 def validate_graph_files() -> None:

@@ -1,440 +1,361 @@
-
 """
-main.py - CLI Interface for GraphRAG-OMOP Semantic Search
+main.py - GraphRAG-OMOP Full Pipeline
 
-User-friendly command-line tool for searching OMOP concepts using semantic search.
+Complete pipeline from clinical text to standardized OMOP concepts.
+
+Pipeline: Clinical Text → [Phase 1: Extract] → Concepts → [Phase 2: Search] → OMOP Standards
 
 Usage:
-    python main.py "metformina"
-    python main.py "diabetes" --vocabulary SNOMED --standard-only
-    python main.py "creatinine" --top-k 20
-    python main.py --batch queries.csv --output results.csv
+    # Full pipeline (interactive)
+    python main.py
+
+    # Full pipeline with text
+    python main.py --text "Paciente con diabetes tratado con metformina"
+
+    # Phase 1 only (extraction)
+    python main.py --phase1 "Paciente con diabetes tratado con metformina"
+
+    # Phase 2 only (search)
+    python main.py --phase2 "metformina"
 """
 
 import sys
 import os
 import argparse
-import csv
+import json
 from pathlib import Path
+from datetime import datetime
 
 # Add src directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from src.phase2.retrieve import SemanticRetriever
 
 # Fix Windows console encoding
 if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8')
 
 
-def parse_arguments():
-    """Parse command-line arguments"""
-    parser = argparse.ArgumentParser(
-        description='GraphRAG-OMOP Semantic Search - Find medical concepts using natural language',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python main.py                            (interactive mode)
-  python main.py "metformina"
-  python main.py "diabetes" --vocabulary SNOMED --standard-only
-  python main.py "creatinine" --top-k 20 --verbose
-  python main.py --batch queries.csv --output results.csv
+def run_phase1(clinical_text: str) -> list:
+    """
+    Phase 1: Extract medical concepts from clinical text.
 
-For more information, see context/PHASE2_PLAN.md
-        """
-    )
+    Args:
+        clinical_text: Clinical text to analyze
 
-    # Query input (mutually exclusive with --batch)
-    query_group = parser.add_mutually_exclusive_group(required=False)
-    query_group.add_argument(
-        'query',
-        nargs='?',
-        type=str,
-        help='Medical term to search (e.g., "metformina", "diabetes")'
-    )
-    query_group.add_argument(
-        '--batch',
-        type=str,
-        metavar='FILE',
-        help='CSV file with queries (must have "query" column)'
-    )
+    Returns:
+        List of extracted concepts with domains
+    """
+    from src.phase1.extractor import extract_medical_entities
 
-    # Search options
-    parser.add_argument(
-        '--top-k',
-        type=int,
-        default=10,
-        metavar='N',
-        help='Number of results to return (default: 10)'
-    )
-    parser.add_argument(
-        '--vocabulary',
-        type=str,
-        metavar='VOCAB',
-        help='Filter by vocabulary (e.g., SNOMED, RxNorm, LOINC)'
-    )
-    parser.add_argument(
-        '--domain',
-        type=str,
-        metavar='DOMAIN',
-        help='Filter by domain (e.g., Drug, Condition, Measurement)'
-    )
-    parser.add_argument(
-        '--standard-only',
-        action='store_true',
-        help='Only return standard concepts'
-    )
-    parser.add_argument(
-        '--min-score',
-        type=float,
-        metavar='SCORE',
-        help='Minimum similarity score (0.0 to 1.0)'
-    )
+    print("\n" + "=" * 70)
+    print("PHASE 1: Clinical Concept Extraction")
+    print("=" * 70)
+    print(f"\nInput ({len(clinical_text)} chars):")
+    print("-" * 50)
+    print(clinical_text[:300] + ("..." if len(clinical_text) > 300 else ""))
+    print("-" * 50)
 
-    # Output options
-    parser.add_argument(
-        '--expand',
-        action='store_true',
-        help='Show related concepts via graph expansion'
-    )
-    parser.add_argument(
-        '--verbose',
-        action='store_true',
-        help='Show detailed information'
-    )
-    parser.add_argument(
-        '--output',
-        type=str,
-        metavar='FILE',
-        help='Output CSV file (for batch mode)'
-    )
-    parser.add_argument(
-        '--no-graph',
-        action='store_true',
-        help='Skip loading graph data (faster startup)'
-    )
+    print("\nExtracting concepts with GPT-4...")
+    result = extract_medical_entities(clinical_text)
+    concepts = result.get("concepts", [])
 
-    return parser.parse_args()
+    print(f"\nExtracted {len(concepts)} concepts:")
+    for c in concepts:
+        print(f"  - {c['text']} [{c['domain']}]")
+
+    return concepts
 
 
-def format_result(rank, result, verbose=False):
-    """Format a single search result for display"""
-    # Standard concept indicator
-    std_indicator = "⭐" if result['standard_concept'] == 'S' else "  "
+def run_phase2(term: str, domain: str = None, retriever=None) -> list:
+    """
+    Phase 2: Find OMOP standard concepts for a medical term.
 
-    # Main result line
-    lines = [
-        f"{rank:2d}. [Score: {result['score']:.4f}] {std_indicator} {result['concept_name']}"
-    ]
+    Args:
+        term: Medical term to search
+        domain: Optional domain filter
+        retriever: Optional pre-initialized retriever
 
-    # Metadata line
-    metadata_parts = [
-        f"ID: {result['concept_id']}",
-        f"Vocab: {result['vocabulary_id']}",
-        f"Domain: {result['domain_id']}"
-    ]
+    Returns:
+        List of matching OMOP concepts
+    """
+    if retriever is None:
+        from src.phase2.retrieve import SemanticRetriever
+        retriever = SemanticRetriever(load_graph_data=False)
 
-    if result['standard_concept'] == 'S':
-        metadata_parts.append("Standard: Yes")
+    filters = {'domain': domain} if domain else None
+    results = retriever.search(term, top_k=3, filters=filters)
 
-    lines.append(f"    {' | '.join(metadata_parts)}")
-
-    # Verbose mode: show additional details
-    if verbose:
-        if 'concept_class_id' in result:
-            lines.append(f"    Class: {result['concept_class_id']}")
-
-    return '\n'.join(lines)
+    return results
 
 
-def print_results(query, results, expand=False, verbose=False, retriever=None):
-    """Pretty print search results"""
-    print("\n" + "=" * 80)
-    print(f"Query: \"{query}\"")
-    print("=" * 80)
+def run_full_pipeline(clinical_text: str, save_output: bool = True) -> dict:
+    """
+    Full pipeline: Extract concepts, find OMOP standards via graph, and save results.
 
-    if not results:
-        print("\n❌ No results found")
-        print("\nSuggestions:")
-        print("  - Try a more general term")
-        print("  - Check spelling")
-        print("  - Remove filters (--vocabulary, --domain, --standard-only)")
-        print("=" * 80)
-        return
+    Pipeline with full traceability:
+    1. Phase 1: Extract concepts from clinical text (LLM)
+    2. Phase 2: Find best RAG match for each concept
+    3. Graph: Follow relationships to find standard OMOP concept
+    4. Save: Output JSON with complete mapping chain
 
-    print(f"\nFound {len(results)} results:\n")
+    Args:
+        clinical_text: Clinical text to process
+        save_output: Whether to save results to file (default: True)
 
-    for i, result in enumerate(results, 1):
-        print(format_result(i, result, verbose))
-        print()
+    Returns:
+        Dict with complete pipeline results
+    """
+    from src.phase2.retrieve import SemanticRetriever
 
-    # Graph expansion
-    if expand and retriever and results:
-        print("=" * 80)
-        print("Related Concepts (via graph expansion):")
-        print("=" * 80)
+    # Phase 1: Extract concepts
+    concepts = run_phase1(clinical_text)
 
-        # Get related concepts for top result
-        top_concept_id = results[0]['concept_id']
-        related = retriever.expand_graph(top_concept_id, depth=1)
+    if not concepts:
+        print("\nNo concepts extracted. Pipeline complete.")
+        return {'mappings': [], 'stats': {'total': 0}}
 
-        if related:
-            print(f"\nConcepts related to: {results[0]['concept_name']}\n")
-            for rel in related[:10]:  # Show top 10 related
-                rel_type = rel.get('relationship', 'Related to')
-                print(f"  → {rel_type}")
-                print(f"    {rel['concept_name']}")
-                print(f"    {rel['vocabulary_id']} | {rel['domain_id']}")
-                print()
+    # Initialize Phase 2 retriever WITH graph for standard mapping
+    print("\n" + "=" * 70)
+    print("PHASE 2: Semantic Search + Standard Mapping")
+    print("=" * 70)
+    print("\nInitializing semantic search with graph...")
+    retriever = SemanticRetriever(load_graph_data=True)
+
+    # Phase 2: Search and standardize each concept
+    print("\n" + "=" * 70)
+    print("RESULTS: Clinical Text → RAG Match → OMOP Standard")
+    print("=" * 70)
+
+    mappings = []
+    stats = {'total': 0, 'mapped_ok': 0, 'needs_review': 0}
+
+    for concept in concepts:
+        term = concept['text']
+        domain = concept['domain']
+        value = concept.get('value')
+        unit = concept.get('unit')
+        stats['total'] += 1
+
+        # Display with value/unit if present
+        value_str = ""
+        if value is not None:
+            value_str = f" = {value}"
+            if unit:
+                value_str += f" {unit}"
+
+        print(f"\n[{domain}] {term}{value_str}")
+        print("-" * 50)
+
+        # Use search_and_standardize method (returns flat format)
+        result = retriever.search_and_standardize(term, domain=domain)
+
+        # Add value and unit to result (pass-through, not searched)
+        result['value'] = value
+        result['unit'] = unit
+
+        mappings.append(result)
+
+        # Display result
+        if result['match_name']:
+            print(f"  MATCH:    [{result['score']:.3f}] {result['match_name']}")
+            print(f"            ID: {result['match_id']} | {result['match_vocab']}")
+
+            if result['standard_id']:
+                if result['standard_id'] == result['match_id']:
+                    print(f"  STANDARD: (same as match)")
+                else:
+                    print(f"  STANDARD: {result['standard_name']}")
+                    print(f"            ID: {result['standard_id']} | {result['standard_vocab']}")
+            else:
+                print(f"  STANDARD: ⚠ Not found")
         else:
-            print("\n(No related concepts found)")
+            print("  (No matches found)")
 
-    print("=" * 80)
+        if result['status'] == 'REVIEW':
+            stats['needs_review'] += 1
+            print(f"  ⚠ REVIEW: {result['note']}")
+        else:
+            stats['mapped_ok'] += 1
+
+    # Summary
+    print("\n" + "=" * 70)
+    print("SUMMARY")
+    print("=" * 70)
+    print(f"  Total concepts: {stats['total']}")
+    print(f"  Mapped OK:      {stats['mapped_ok']}")
+    print(f"  Needs review:   {stats['needs_review']}")
+
+    # Build output structure
+    output = {
+        'timestamp': datetime.now().isoformat(),
+        'input_text': clinical_text,
+        'stats': stats,
+        'mappings': mappings
+    }
+
+    # Save to file
+    if save_output:
+        output_dir = Path('data/output')
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_file = output_dir / f'pipeline_result_{timestamp}.json'
+
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(output, f, ensure_ascii=False, indent=2)
+
+        print(f"\n  Results saved to: {output_file}")
+
+    print("=" * 70)
+    print("PIPELINE COMPLETE")
+    print("=" * 70)
+
+    return output
 
 
-def get_yes_no_input(prompt, default='n'):
-    """Get yes/no input from user"""
+def interactive_mode():
+    """Interactive mode - step by step pipeline."""
+    print("\n" + "=" * 70)
+    print("GraphRAG-OMOP - Full Pipeline (Interactive)")
+    print("=" * 70)
+    print("\nThis tool extracts medical concepts from clinical text")
+    print("and maps them to standardized OMOP vocabulary.\n")
+
     while True:
-        response = input(prompt).strip().lower()
-        if not response:
-            return default == 'y'
-        if response in ['y', 'yes', 's', 'si', 'sí']:
-            return True
-        if response in ['n', 'no']:
-            return False
-        print("   Please answer y/n")
+        print("-" * 70)
+        print("\nOptions:")
+        print("  1. Full pipeline (text → extract → search)")
+        print("  2. Phase 1 only (extract concepts)")
+        print("  3. Phase 2 only (search term)")
+        print("  q. Quit")
 
+        choice = input("\nSelect option: ").strip().lower()
 
-def get_number_input(prompt, default, min_val=1, max_val=100):
-    """Get number input from user"""
-    while True:
-        response = input(prompt).strip()
-        if not response:
-            return default
-        try:
-            value = int(response)
-            if min_val <= value <= max_val:
-                return value
-            print(f"   Please enter a number between {min_val} and {max_val}")
-        except ValueError:
-            print("   Please enter a valid number")
-
-
-def interactive_mode(retriever):
-    """Interactive mode - ask user for search parameters"""
-    print("\n" + "=" * 80)
-    print("INTERACTIVE MODE")
-    print("=" * 80)
-
-    while True:
-        print("\n🔍 Enter medical concept to search (or 'quit' to exit):")
-        query = input("   > ").strip()
-
-        if not query or query.lower() in ['quit', 'exit', 'q']:
-            print("\n👋 Goodbye!")
+        if choice in ('q', 'quit', 'exit'):
+            print("\nGoodbye!")
             break
 
-        # Ask for number of results
-        print("\n📊 How many results do you want? (default: 10)")
-        top_k = get_number_input("   > ", 10, 1, 100)
+        elif choice == '1':
+            print("\nEnter clinical text (or 'back' to return):")
+            text = input("> ").strip()
+            if text.lower() == 'back':
+                continue
+            if text:
+                run_full_pipeline(text)
 
-        # Ask for graph expansion
-        print("\n🔗 Show related concepts via graph expansion? (y/n, default: n)")
-        expand = get_yes_no_input("   > ", 'n')
+        elif choice == '2':
+            print("\nEnter clinical text to extract concepts:")
+            text = input("> ").strip()
+            if text:
+                run_phase1(text)
 
-        # Build filters (optional)
-        filters = {}
+        elif choice == '3':
+            print("\nEnter medical term to search:")
+            term = input("> ").strip()
+            if term:
+                from src.phase2.retrieve import SemanticRetriever
+                print("\nInitializing search...")
+                retriever = SemanticRetriever(load_graph_data=False)
+                results = retriever.search(term, top_k=5)
 
-        # Search and display
-        print(f"\n🔍 Searching for: \"{query}\"...")
+                print(f"\nResults for '{term}':")
+                for i, r in enumerate(results, 1):
+                    std = " ★" if r['standard_concept'] == 'S' else ""
+                    print(f"  {i}. [{r['score']:.3f}] {r['concept_name']}{std}")
+                    print(f"     ID: {r['concept_id']} | {r['vocabulary_id']} | {r['domain_id']}")
 
-        results = retriever.search(
-            query,
-            top_k=top_k,
-            filters=filters if filters else None
-        )
-
-        # Display results
-        print_results(
-            query,
-            results,
-            expand=expand,
-            verbose=False,
-            retriever=retriever if expand else None
-        )
-
-        # Ask if user wants another search
-        print("\n❓ Search another concept? (y/n, default: y)")
-        if not get_yes_no_input("   > ", 'y'):
-            print("\n👋 Goodbye!")
-            break
-
-
-def single_query_mode(args, retriever):
-    """Handle single query mode"""
-    # Build filters
-    filters = {}
-    if args.vocabulary:
-        filters['vocabulary'] = args.vocabulary
-    if args.domain:
-        filters['domain'] = args.domain
-    if args.standard_only:
-        filters['standard_only'] = True
-    if args.min_score:
-        filters['min_score'] = args.min_score
-
-    # Search
-    print(f"\n🔍 Searching for: \"{args.query}\"")
-    if filters:
-        print(f"   Filters: {filters}")
-
-    results = retriever.search(
-        args.query,
-        top_k=args.top_k,
-        filters=filters if filters else None
-    )
-
-    # Display results
-    print_results(
-        args.query,
-        results,
-        expand=args.expand,
-        verbose=args.verbose,
-        retriever=retriever if args.expand else None
-    )
-
-
-def batch_query_mode(args, retriever):
-    """Handle batch query mode"""
-    # Check input file exists
-    if not Path(args.batch).exists():
-        print(f"\n❌ ERROR: File not found: {args.batch}")
-        sys.exit(1)
-
-    # Read queries from CSV
-    print(f"\n📂 Reading queries from: {args.batch}")
-
-    try:
-        with open(args.batch, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            queries = list(reader)
-
-            if 'query' not in queries[0]:
-                print("\n❌ ERROR: CSV must have a 'query' column")
-                sys.exit(1)
-    except Exception as e:
-        print(f"\n❌ ERROR reading file: {e}")
-        sys.exit(1)
-
-    print(f"   Found {len(queries)} queries")
-
-    # Build filters
-    filters = {}
-    if args.vocabulary:
-        filters['vocabulary'] = args.vocabulary
-    if args.domain:
-        filters['domain'] = args.domain
-    if args.standard_only:
-        filters['standard_only'] = True
-    if args.min_score:
-        filters['min_score'] = args.min_score
-
-    # Process queries
-    all_results = []
-
-    print("\n🔍 Processing queries...")
-    for i, row in enumerate(queries, 1):
-        query = row['query'].strip()
-        if not query:
-            continue
-
-        print(f"   [{i}/{len(queries)}] {query}")
-
-        results = retriever.search(
-            query,
-            top_k=args.top_k,
-            filters=filters if filters else None
-        )
-
-        # Store results
-        for rank, result in enumerate(results, 1):
-            all_results.append({
-                'query': query,
-                'rank': rank,
-                'concept_id': result['concept_id'],
-                'concept_name': result['concept_name'],
-                'score': result['score'],
-                'vocabulary_id': result['vocabulary_id'],
-                'domain_id': result['domain_id'],
-                'standard_concept': result['standard_concept']
-            })
-
-    # Write output CSV
-    if args.output:
-        output_path = args.output
-    else:
-        # Default output filename
-        input_stem = Path(args.batch).stem
-        output_path = f"{input_stem}_results.csv"
-
-    print(f"\n💾 Writing results to: {output_path}")
-
-    with open(output_path, 'w', encoding='utf-8', newline='') as f:
-        if all_results:
-            writer = csv.DictWriter(f, fieldnames=all_results[0].keys())
-            writer.writeheader()
-            writer.writerows(all_results)
-
-    print(f"✅ Processed {len(queries)} queries, found {len(all_results)} results")
-    print("=" * 80)
+        else:
+            print("Invalid option. Please select 1, 2, 3, or q.")
 
 
 def main():
-    """Main CLI entry point"""
-    args = parse_arguments()
+    """Main entry point."""
+    parser = argparse.ArgumentParser(
+        description='GraphRAG-OMOP: Clinical Text → OMOP Standards',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Interactive mode
+  python main.py
 
-    # Check if embeddings exist
-    embeddings_path = Path('data/embeddings.npy')
-    if not embeddings_path.exists():
-        print("\n" + "=" * 80)
-        print("❌ ERROR: Embeddings not found")
-        print("=" * 80)
-        print("\nPlease generate embeddings first:")
-        print("  python src/embeddings.py --max-concepts 100000")
-        print("\nThis will take ~10-15 minutes on CPU.")
-        print("=" * 80)
-        sys.exit(1)
+  # Full pipeline
+  python main.py --text "Paciente con diabetes e hipertensión"
 
-    # Initialize retriever
-    print("\n" + "=" * 80)
-    print("GraphRAG-OMOP Semantic Search")
-    print("=" * 80)
-    print("\n📊 Initializing retriever...")
-    print("   (Loading embeddings and model, this may take ~15 seconds)")
+  # Phase 1 only (extraction)
+  python main.py --phase1 "Paciente diabético con metformina"
 
+  # Phase 2 only (search)
+  python main.py --phase2 "metformina"
+
+Individual phase scripts:
+  python -m src.phase1.main    # Phase 1 standalone
+  python -m src.phase2.main    # Phase 2 standalone
+        """
+    )
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        '--text', '-t',
+        help='Clinical text for full pipeline'
+    )
+    group.add_argument(
+        '--phase1', '-p1',
+        metavar='TEXT',
+        help='Run Phase 1 only: extract concepts from text'
+    )
+    group.add_argument(
+        '--phase2', '-p2',
+        metavar='TERM',
+        help='Run Phase 2 only: search OMOP for term'
+    )
+
+    args = parser.parse_args()
+
+    # Check dependencies
     try:
-        retriever = SemanticRetriever(load_graph_data=not args.no_graph)
-        print("✅ Retriever initialized successfully\n")
-    except Exception as e:
-        print(f"\n❌ ERROR initializing retriever: {e}")
-        import traceback
-        traceback.print_exc()
+        if args.phase1 or args.text:
+            # Check Phase 1 dependencies
+            from src.phase1.extractor import extract_medical_entities
+        if args.phase2 or args.text or (not args.phase1 and not args.phase2):
+            # Check Phase 2 dependencies
+            embeddings_path = Path('data/embeddings/embeddings.npy')
+            if not embeddings_path.exists():
+                print("\n[ERROR] Embeddings not found for Phase 2")
+                print("Run: python -m src.phase2.embeddings --max-concepts 100000")
+                if args.phase2:
+                    sys.exit(1)
+    except ImportError as e:
+        print(f"\n[ERROR] Missing dependency: {e}")
         sys.exit(1)
 
     # Route to appropriate mode
     try:
-        if args.batch:
-            batch_query_mode(args, retriever)
-        elif args.query:
-            single_query_mode(args, retriever)
+        if args.text:
+            run_full_pipeline(args.text)
+        elif args.phase1:
+            run_phase1(args.phase1)
+        elif args.phase2:
+            from src.phase2.retrieve import SemanticRetriever
+            print("\nInitializing semantic search...")
+            retriever = SemanticRetriever(load_graph_data=False)
+            results = retriever.search(args.phase2, top_k=10)
+
+            print(f"\n{'=' * 70}")
+            print(f"PHASE 2: Search results for '{args.phase2}'")
+            print('=' * 70)
+            for i, r in enumerate(results, 1):
+                std = " ★" if r['standard_concept'] == 'S' else ""
+                print(f"  {i}. [{r['score']:.3f}] {r['concept_name']}{std}")
+                print(f"     ID: {r['concept_id']} | {r['vocabulary_id']} | {r['domain_id']}")
+            print('=' * 70)
         else:
-            # No query provided - enter interactive mode
-            interactive_mode(retriever)
+            interactive_mode()
+
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted by user")
+        print("\n\nInterrupted.")
         sys.exit(0)
     except Exception as e:
-        print(f"\n❌ ERROR: {e}")
+        print(f"\n[ERROR] {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

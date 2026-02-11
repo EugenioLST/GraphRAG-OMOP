@@ -32,7 +32,7 @@ from sentence_transformers import SentenceTransformer
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.phase2.embeddings import load_embeddings
-from src.phase2.graph import load_graph
+from src.phase2.graph import load_graph, find_standard_mapping, get_concept_info
 
 # Fix Windows console encoding
 if sys.platform == 'win32':
@@ -47,8 +47,8 @@ class SemanticRetriever:
     to find relevant medical concepts from natural language queries.
     """
 
-    def __init__(self, embeddings_dir='data', nodes_csv_path='data/nodes.csv',
-                 graph_path='data/omop_graph.pkl', load_graph_data=True):
+    def __init__(self, embeddings_dir='data/embeddings', nodes_csv_path='data/processed/nodes.csv',
+                 graph_path='data/processed/omop_graph.pkl', load_graph_data=True):
         """
         Initialize the semantic retriever.
 
@@ -281,6 +281,106 @@ class SemanticRetriever:
         return {
             'primary_results': primary_results,
             'expanded_results': expanded_results
+        }
+
+
+    def search_and_standardize(self, query, domain=None, top_k=1):
+        """
+        Search for a concept and find its OMOP standard mapping via graph.
+
+        Returns a flat, review-friendly format with full traceability.
+
+        Args:
+            query: Search query (extracted concept text)
+            domain: Optional domain filter (e.g., 'Drug', 'Condition')
+            top_k: Number of RAG candidates to consider (default: 1)
+
+        Returns:
+            Dict with flat structure:
+            {
+                'input': original query text,
+                'domain': domain,
+                'match_name': RAG match concept name,
+                'match_id': RAG match concept_id,
+                'match_vocab': RAG match vocabulary,
+                'score': similarity score,
+                'standard_name': standard concept name (or None),
+                'standard_id': standard concept_id (or None),
+                'standard_vocab': standard vocabulary (or None),
+                'status': 'OK' | 'REVIEW',
+                'note': explanation if REVIEW
+            }
+        """
+        # Build filters
+        filters = {'domain': domain} if domain else None
+
+        # Step 1: Semantic search (RAG)
+        results = self.search(query, top_k=top_k, filters=filters)
+
+        if not results:
+            return {
+                'input': query,
+                'domain': domain,
+                'match_name': None,
+                'match_id': None,
+                'match_vocab': None,
+                'score': None,
+                'standard_name': None,
+                'standard_id': None,
+                'standard_vocab': None,
+                'status': 'REVIEW',
+                'note': 'No RAG match found'
+            }
+
+        # Take best match
+        best_match = results[0]
+        score = round(best_match['score'], 3)
+
+        # Step 2: Find standard concept via graph
+        standard_name = None
+        standard_id = None
+        standard_vocab = None
+        status = 'OK'
+        note = None
+
+        if self.graph is None:
+            # No graph - use RAG match if it's standard
+            if best_match['standard_concept'] == 'S':
+                standard_name = best_match['concept_name']
+                standard_id = best_match['concept_id']
+                standard_vocab = best_match['vocabulary_id']
+            else:
+                status = 'REVIEW'
+                note = 'Graph not loaded'
+        else:
+            # Use graph to find standard mapping
+            standard_info = find_standard_mapping(self.graph, best_match['concept_id'])
+
+            if standard_info:
+                standard_name = standard_info['concept_name']
+                standard_id = standard_info['concept_id']
+                standard_vocab = standard_info['vocabulary_id']
+            else:
+                status = 'REVIEW'
+                note = 'No standard mapping found'
+
+        # Flag for review if score is low
+        if score < 0.7:
+            status = 'REVIEW'
+            note = note or f'Low score ({score})'
+
+        return {
+            'input': query,
+            'domain': domain,
+            'match_name': best_match['concept_name'],
+            'match_id': best_match['concept_id'],
+            'match_vocab': best_match['vocabulary_id'],
+            'score': score,
+            'standard_name': standard_name,
+            'standard_id': standard_id,
+            'standard_vocab': standard_vocab,
+            'status': status,
+            'note': note
         }
 
 

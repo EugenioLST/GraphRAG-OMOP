@@ -16,10 +16,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import PydanticOutputParser
 from src.phase1.prompts import EXTRACTION_SYSTEM_PROMPT
 from src.phase1.schema import ExtractionResult
-from langchain.output_parsers import PydanticOutputParser
 
 # Load .env file
 env_path = Path(__file__).parent.parent.parent / '.env'

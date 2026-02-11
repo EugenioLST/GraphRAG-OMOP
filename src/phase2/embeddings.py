@@ -127,7 +127,7 @@ def generate_embeddings(model, concept_names, batch_size=None, show_progress=Tru
     return embeddings
 
 
-def build_embedding_index(nodes_csv_path='data/nodes.csv', output_dir='data', max_concepts=None):
+def build_embedding_index(nodes_csv_path='data/processed/nodes.csv', output_dir='data/embeddings', max_concepts=None):
     """
     Build embedding index from nodes.csv and save to disk.
 
@@ -293,14 +293,14 @@ Examples:
 
     parser.add_argument(
         '--nodes-csv',
-        default='data/nodes.csv',
-        help='Path to nodes.csv file (default: data/nodes.csv)'
+        default='data/processed/nodes.csv',
+        help='Path to nodes.csv file (default: data/processed/nodes.csv)'
     )
 
     parser.add_argument(
         '--output-dir',
-        default='data',
-        help='Directory to save embeddings (default: data/)'
+        default='data/embeddings',
+        help='Directory to save embeddings (default: data/embeddings/)'
     )
 
     parser.add_argument(
