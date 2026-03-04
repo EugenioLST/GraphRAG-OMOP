@@ -372,3 +372,32 @@ GraphRAG-OMOP/
 | Documentación | Completa | Completa | ✅ |
 
 **Estado Final:** ✅ **PROYECTO EXITOSO - PoC COMPLETADO**
+
+---
+
+## 🎨 NEXT PHASE: Visual Dashboard (PLANNED)
+
+### Objetivo
+Crear un dashboard visual con Next.js + TypeScript para demos en vivo con médicos.
+
+### Estado
+🔵 **PLANNED** - Plan completo en `context/DASHBOARD_PLAN.md`
+
+### Scope
+- **Backend:** FastAPI wrapper del pipeline existente
+- **Frontend:** Next.js 14 con TypeScript + Tailwind CSS
+- **Features:**
+  - Input de texto clínico + ejemplos pre-cargados
+  - Visualización de resultados en tabla interactiva
+  - Exportación a CSV
+  - UI profesional para audiencia médica
+
+### Timeline Estimado
+- **Total:** 29-42 horas (~4-6 días)
+- **Fases:** 10 fases incrementales
+- **Prioridad:** Media (demo enhancement)
+
+### Documentación
+- Plan detallado: `context/DASHBOARD_PLAN.md`
+- Setup guide: (pending) `DASHBOARD_SETUP.md`
+- Demo guide: (pending) `DASHBOARD_DEMO_GUIDE.md`

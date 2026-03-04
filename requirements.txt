@@ -1,6 +1,0 @@
-pandas
-networkx
-sentence-transformers
-numpy
-torch 
-scikit-learn

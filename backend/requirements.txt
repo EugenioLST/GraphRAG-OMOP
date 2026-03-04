@@ -1,0 +1,23 @@
+# ============================================================================
+# GraphRAG-OMOP Backend - Python Dependencies
+# ============================================================================
+
+# Core Data Science
+pandas
+networkx
+sentence-transformers
+numpy
+torch
+scikit-learn
+
+# LangChain for Phase 1 (GPT-4 extraction)
+langchain>=0.1.0
+langchain-openai>=0.1.0
+langchain-core
+
+# Backend API (FastAPI)
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0

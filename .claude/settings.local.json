@@ -5,7 +5,10 @@
       "Bash(mkdir:*)",
       "Bash(tree:*)",
       "SlashCommand(/plan_feature)",
-      "Bash(venv/Scripts/python.exe:*)"
+      "Bash(venv/Scripts/python.exe:*)",
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(test:*)"
     ],
     "deny": [],
     "ask": []

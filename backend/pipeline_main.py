@@ -1,6 +1,8 @@
 """
 main.py - GraphRAG-OMOP Full Pipeline
 
+ES EL ANTIGUO CLI
+
 Complete pipeline from clinical text to standardized OMOP concepts.
 
 Pipeline: Clinical Text → [Phase 1: Extract] → Concepts → [Phase 2: Search] → OMOP Standards
