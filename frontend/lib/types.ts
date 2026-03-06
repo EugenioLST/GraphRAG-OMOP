@@ -29,13 +29,13 @@ export interface Phase1Response {
 export interface ConceptMapping {
   input: string;
   domain: string;
-  match_name: string;
-  match_id: number;
-  match_vocab: string;
-  score: number;
-  standard_name: string;
-  standard_id: number;
-  standard_vocab: string;
+  match_name: string | null;
+  match_id: number | null;
+  match_vocab: string | null;
+  score: number | null;
+  standard_name: string | null;
+  standard_id: number | null;
+  standard_vocab: string | null;
   status: "OK" | "REVIEW";
   note: string | null;
   value: number | null;

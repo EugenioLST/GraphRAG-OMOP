@@ -53,14 +53,18 @@ export function ConceptRow({ mapping }: ConceptRowProps) {
         </TableCell>
 
         <TableCell>
-          <ScoreBar score={mapping.score} />
+          {mapping.score !== null ? (
+            <ScoreBar score={mapping.score} />
+          ) : (
+            <span className="text-xs text-muted-foreground">N/A</span>
+          )}
         </TableCell>
 
         <TableCell>
           <div className="space-y-1">
-            <p className="font-medium text-sm">{mapping.standard_name}</p>
+            <p className="font-medium text-sm">{mapping.standard_name || "No match"}</p>
             <p className="text-xs text-muted-foreground">
-              {mapping.standard_vocab} {mapping.standard_id}
+              {mapping.standard_vocab || "N/A"} {mapping.standard_id || ""}
             </p>
           </div>
         </TableCell>
@@ -82,10 +86,10 @@ export function ConceptRow({ mapping }: ConceptRowProps) {
                 <div className="space-y-2">
                   <p className="font-medium text-muted-foreground">Best Match</p>
                   <div className="space-y-1">
-                    <p><span className="font-medium">Name:</span> {mapping.match_name}</p>
-                    <p><span className="font-medium">ID:</span> {mapping.match_id}</p>
-                    <p><span className="font-medium">Vocabulary:</span> {mapping.match_vocab}</p>
-                    <p><span className="font-medium">Score:</span> {(mapping.score * 100).toFixed(1)}%</p>
+                    <p><span className="font-medium">Name:</span> {mapping.match_name || "N/A"}</p>
+                    <p><span className="font-medium">ID:</span> {mapping.match_id || "N/A"}</p>
+                    <p><span className="font-medium">Vocabulary:</span> {mapping.match_vocab || "N/A"}</p>
+                    <p><span className="font-medium">Score:</span> {mapping.score !== null ? `${(mapping.score * 100).toFixed(1)}%` : "N/A"}</p>
                   </div>
                 </div>
 
@@ -93,9 +97,9 @@ export function ConceptRow({ mapping }: ConceptRowProps) {
                 <div className="space-y-2">
                   <p className="font-medium text-muted-foreground">Standard OMOP Concept</p>
                   <div className="space-y-1">
-                    <p><span className="font-medium">Name:</span> {mapping.standard_name}</p>
-                    <p><span className="font-medium">ID:</span> {mapping.standard_id}</p>
-                    <p><span className="font-medium">Vocabulary:</span> {mapping.standard_vocab}</p>
+                    <p><span className="font-medium">Name:</span> {mapping.standard_name || "N/A"}</p>
+                    <p><span className="font-medium">ID:</span> {mapping.standard_id || "N/A"}</p>
+                    <p><span className="font-medium">Vocabulary:</span> {mapping.standard_vocab || "N/A"}</p>
                     <p><span className="font-medium">Domain:</span> {mapping.domain}</p>
                   </div>
                 </div>

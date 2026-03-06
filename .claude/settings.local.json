@@ -8,7 +8,10 @@
       "Bash(venv/Scripts/python.exe:*)",
       "Bash(curl:*)",
       "Bash(python:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(source venv/Scripts/activate)",
+      "Bash(pip install:*)",
+      "Bash(call venvScriptsactivate.bat)"
     ],
     "deny": [],
     "ask": []
