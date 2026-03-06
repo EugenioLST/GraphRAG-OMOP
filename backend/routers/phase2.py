@@ -4,6 +4,7 @@ Search OMOP vocabulary and map concepts to standards.
 """
 import sys
 import logging
+import asyncio
 from pathlib import Path
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, status
@@ -56,15 +57,12 @@ async def search_and_map(request: Phase2Request):
                 detail="System not ready. Grafo still loading. Check /status endpoint."
             )
 
-        # Process each concept
-        mappings = []
-        stats = {'total': 0, 'mapped_ok': 0, 'needs_review': 0}
-
-        for concept in request.concepts:
-            stats['total'] += 1
-
-            # Search and standardize using existing method
-            result = retriever.search_and_standardize(
+        # Process all concepts in parallel
+        # FAISS index is thread-safe for searches (read-only), no Semaphore needed
+        async def process_concept(concept):
+            """Process a single concept in a thread."""
+            result = await asyncio.to_thread(
+                retriever.search_and_standardize,
                 query=concept.text,
                 domain=concept.domain
             )
@@ -73,15 +71,59 @@ async def search_and_map(request: Phase2Request):
             result['value'] = concept.value
             result['unit'] = concept.unit
 
-            mappings.append(result)
+            return result
 
-            # Update stats
-            if result['status'] == 'REVIEW':
-                stats['needs_review'] += 1
+        # Execute all searches in parallel (FAISS handles concurrency natively)
+        mappings = await asyncio.gather(*[
+            process_concept(concept) for concept in request.concepts
+        ])
+
+        # Calculate stats
+        stats = {
+            'total': len(mappings),
+            'mapped_ok': sum(1 for m in mappings if m['status'] != 'REVIEW'),
+            'needs_review': sum(1 for m in mappings if m['status'] == 'REVIEW')
+        }
+
+        # Detailed per-concept logging for debugging the mapping pipeline
+        logger.info("")
+        logger.info("=" * 100)
+        logger.info("PHASE 2 — DETAILED MAPPING RESULTS")
+        logger.info("=" * 100)
+
+        for i, m in enumerate(mappings, 1):
+            status_icon = "✅" if m['status'] == 'OK' else "⚠️"
+            logger.info(f"")
+            logger.info(f"--- Concept {i}/{len(mappings)} {status_icon} [{m['status']}] ---")
+            logger.info(f"  INPUT:      \"{m['input']}\" (domain: {m['domain']})")
+            if m.get('value') or m.get('unit'):
+                logger.info(f"  VALUE:      {m.get('value', '')} {m.get('unit', '')}")
+
+            # RAG match (what FAISS found as closest embedding)
+            if m.get('match_name'):
+                logger.info(f"  RAG MATCH:  \"{m['match_name']}\" (ID: {m['match_id']}, vocab: {m['match_vocab']})")
+                logger.info(f"  SCORE:      {m['score']:.4f} ({m['score']*100:.1f}%)")
             else:
-                stats['mapped_ok'] += 1
+                logger.info(f"  RAG MATCH:  None — no embedding match found")
 
-        logger.info(f"✅ Phase 2 success: {stats['mapped_ok']}/{stats['total']} mapped")
+            # Standard concept (what the graph resolved to)
+            if m.get('standard_name'):
+                same = m.get('match_id') == m.get('standard_id')
+                via = "direct (match IS standard)" if same else "graph traversal (match -> standard)"
+                logger.info(f"  STANDARD:   \"{m['standard_name']}\" (ID: {m['standard_id']}, vocab: {m['standard_vocab']})")
+                logger.info(f"  RESOLVED:   via {via}")
+            else:
+                logger.info(f"  STANDARD:   None — no standard mapping found")
+
+            # Note (why it needs review)
+            if m.get('note'):
+                logger.info(f"  NOTE:       {m['note']}")
+
+        logger.info("")
+        logger.info("-" * 100)
+        logger.info(f"SUMMARY: {stats['total']} concepts | {stats['mapped_ok']} OK | {stats['needs_review']} REVIEW")
+        logger.info("=" * 100)
+        logger.info("")
 
         return {
             'timestamp': datetime.now().isoformat(),

@@ -25,13 +25,13 @@ import sys
 import os
 import numpy as np
 import pandas as pd
-from sklearn.metrics.pairwise import cosine_similarity
+import faiss
 from sentence_transformers import SentenceTransformer
 
 # Add parent directory to path for imports when running as script
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.phase2.embeddings import load_embeddings
+from src.phase2.embeddings import load_embeddings, load_concept_mapping, build_faiss_index
 from src.phase2.graph import load_graph, find_standard_mapping, get_concept_info
 
 # Fix Windows console encoding
@@ -65,11 +65,30 @@ class SemanticRetriever:
         self.model = SentenceTransformer('cambridgeltl/SapBERT-from-PubMedBERT-fulltext')
         print(f"✓ Model loaded on device: {self.model.device}")
 
-        # Load embeddings
-        print("Loading embeddings...")
-        self.embeddings, self.concept_id_to_index = load_embeddings(embeddings_dir)
+        # Load FAISS index (fast vector search instead of brute-force numpy)
+        faiss_path = os.path.join(embeddings_dir, 'faiss_index.bin')
+
+        if os.path.exists(faiss_path):
+            # Load pre-built FAISS index from disk
+            print(f"Loading FAISS index from {faiss_path}...")
+            self.index = faiss.read_index(faiss_path)
+            print(f"✓ FAISS index loaded: {self.index.ntotal:,} vectors")
+        else:
+            # First run: build FAISS index automatically from embeddings.npy
+            print("FAISS index not found, building from embeddings...")
+            self.index = build_faiss_index(embeddings_dir)
+            print(f"✓ FAISS index built and saved: {self.index.ntotal:,} vectors")
+
+        # Configure search: how many clusters to explore per query
+        # More nprobe = more accurate but slower (10 of 256 = ~4% of data)
+        if hasattr(self.index, 'nprobe'):
+            self.index.nprobe = 10
+
+        # Load concept_id <-> index mapping (still needed to translate FAISS results)
+        print("Loading concept ID mapping...")
+        self.concept_id_to_index = load_concept_mapping(embeddings_dir)
         self.index_to_concept_id = {idx: cid for cid, idx in self.concept_id_to_index.items()}
-        print(f"✓ Loaded {len(self.concept_id_to_index):,} concept embeddings")
+        print(f"✓ Loaded mapping for {len(self.concept_id_to_index):,} concepts")
 
         # Load concept metadata
         print(f"Loading concept metadata from {nodes_csv_path}...")
@@ -119,24 +138,31 @@ class SemanticRetriever:
             List of dicts with keys: concept_id, concept_name, score,
             vocabulary_id, domain_id, standard_concept
         """
-        # Encode query
-        query_embedding = self.model.encode([query], convert_to_numpy=True)
+        # Encode query and normalize (FAISS expects normalized vectors for inner product)
+        query_embedding = self.model.encode([query], convert_to_numpy=True).astype(np.float32)
+        faiss.normalize_L2(query_embedding)
 
-        # Calculate cosine similarity with all concepts
-        similarities = cosine_similarity(query_embedding, self.embeddings)[0]
+        # FAISS search: returns top candidates in milliseconds (not brute-force)
+        # Over-fetch to compensate for post-search filtering (domain, vocabulary, etc.)
+        fetch_k = max(top_k * 10, 50)
+        scores, indices = self.index.search(query_embedding, fetch_k)
 
-        # Get top-k indices
-        top_indices = np.argsort(similarities)[::-1]
-
-        # Build results
+        # Build results from FAISS output (already sorted by score)
         results = []
-        for idx in top_indices:
-            # Get concept_id from index
-            concept_id = self.index_to_concept_id[idx]
-            score = float(similarities[idx])
+        for score, idx in zip(scores[0], indices[0]):
+            # FAISS returns -1 for empty slots
+            if idx == -1:
+                continue
+
+            score = float(score)
 
             # Apply min_score filter
             if min_score is not None and score < min_score:
+                continue
+
+            # Get concept_id from FAISS index position
+            concept_id = self.index_to_concept_id.get(int(idx))
+            if concept_id is None:
                 continue
 
             # Get metadata

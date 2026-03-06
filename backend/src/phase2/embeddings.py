@@ -259,6 +259,100 @@ def load_embeddings(output_dir='data'):
     return embeddings, concept_id_to_index
 
 
+def load_concept_mapping(embeddings_dir='data/embeddings'):
+    """
+    Load only the concept_id_to_index mapping (without loading embeddings).
+
+    Args:
+        embeddings_dir: Directory containing concept_id_to_index.pkl
+
+    Returns:
+        dict: concept_id -> embedding row index
+    """
+    mapping_path = os.path.join(embeddings_dir, 'concept_id_to_index.pkl')
+
+    if not os.path.exists(mapping_path):
+        raise FileNotFoundError(f"Mapping file not found: {mapping_path}")
+
+    with open(mapping_path, 'rb') as f:
+        concept_id_to_index = pickle.load(f)
+
+    return concept_id_to_index
+
+
+def build_faiss_index(embeddings_dir='data/embeddings', n_clusters=256):
+    """
+    Build a FAISS IVF index from existing embeddings.
+
+    This creates an indexed version of the embeddings that allows
+    millisecond search instead of brute-force comparison.
+
+    How it works:
+    1. Loads raw embeddings from embeddings.npy
+    2. Normalizes vectors (so inner product = cosine similarity)
+    3. Trains k-means to create n_clusters clusters (the "shelves")
+    4. Adds all vectors to the clustered index
+    5. Saves as faiss_index.bin (reusable across restarts)
+
+    Args:
+        embeddings_dir: Directory with embeddings.npy and concept_id_to_index.pkl
+        n_clusters: Number of IVF clusters (default: 256)
+                    More clusters = faster search but needs more training data.
+                    Rule of thumb: sqrt(N) to 4*sqrt(N). For 3.8M → 256 is good.
+
+    Output:
+        {embeddings_dir}/faiss_index.bin
+    """
+    import faiss
+
+    print("=" * 70)
+    print("BUILDING FAISS INDEX")
+    print("=" * 70)
+
+    # 1. Load existing embeddings
+    embeddings, concept_id_to_index = load_embeddings(embeddings_dir)
+    n_vectors, dim = embeddings.shape
+    print(f"\nLoaded {n_vectors:,} embeddings of dimension {dim}")
+
+    # 2. Normalize vectors (inner product of unit vectors = cosine similarity)
+    print("Normalizing vectors...")
+    embeddings = embeddings.astype(np.float32)  # FAISS requires float32
+    faiss.normalize_L2(embeddings)
+    print("✓ Vectors normalized")
+
+    # 3. Create IVF index with clusters
+    print(f"\nCreating IVF index with {n_clusters} clusters...")
+    quantizer = faiss.IndexFlatIP(dim)  # Inner Product (= cosine for normalized)
+    index = faiss.IndexIVFFlat(quantizer, dim, n_clusters, faiss.METRIC_INNER_PRODUCT)
+
+    # 4. Train k-means (finds cluster centroids)
+    print("Training k-means (finding cluster centroids)...")
+    index.train(embeddings)
+    print("✓ Training complete")
+
+    # 5. Add all vectors to index
+    print(f"Adding {n_vectors:,} vectors to index...")
+    index.add(embeddings)
+    print(f"✓ Index contains {index.ntotal:,} vectors")
+
+    # 6. Save to disk
+    index_path = os.path.join(embeddings_dir, 'faiss_index.bin')
+    print(f"\nSaving index to: {index_path}")
+    faiss.write_index(index, index_path)
+
+    index_size_mb = os.path.getsize(index_path) / (1024 * 1024)
+    print(f"✓ Index saved ({index_size_mb:.1f} MB)")
+
+    print(f"\n✅ FAISS index built successfully!")
+    print(f"   Vectors: {index.ntotal:,}")
+    print(f"   Clusters: {n_clusters}")
+    print(f"   Dimension: {dim}")
+    print(f"   File: {index_path}")
+    print("=" * 70)
+
+    return index
+
+
 def main():
     """
     Main entry point for command-line usage.
@@ -310,25 +404,39 @@ Examples:
         help='Maximum number of concepts to process (default: all). Use 10000 for small test, 100000 for medium test.'
     )
 
+    parser.add_argument(
+        '--build-faiss',
+        action='store_true',
+        help='Build FAISS index from existing embeddings (run after generating embeddings)'
+    )
+
     args = parser.parse_args()
 
-    # Build embedding index
-    try:
-        embeddings, concept_id_to_index = build_embedding_index(
-            nodes_csv_path=args.nodes_csv,
-            output_dir=args.output_dir,
-            max_concepts=args.max_concepts
-        )
+    if args.build_faiss:
+        # Build FAISS index from existing embeddings
+        try:
+            build_faiss_index(embeddings_dir=args.output_dir)
+        except Exception as e:
+            print(f"\n❌ ERROR: {e}")
+            raise
+    else:
+        # Build embedding index
+        try:
+            embeddings, concept_id_to_index = build_embedding_index(
+                nodes_csv_path=args.nodes_csv,
+                output_dir=args.output_dir,
+                max_concepts=args.max_concepts
+            )
 
-        print("\n" + "=" * 70)
-        print("SUCCESS!")
-        print("=" * 70)
-        print(f"\nEmbeddings ready for {len(concept_id_to_index):,} concepts")
-        print(f"You can now use retrieve.py for semantic search")
+            print("\n" + "=" * 70)
+            print("SUCCESS!")
+            print("=" * 70)
+            print(f"\nEmbeddings ready for {len(concept_id_to_index):,} concepts")
+            print(f"You can now use retrieve.py for semantic search")
 
-    except Exception as e:
-        print(f"\n❌ ERROR: {e}")
-        raise
+        except Exception as e:
+            print(f"\n❌ ERROR: {e}")
+            raise
 
 
 if __name__ == '__main__':
