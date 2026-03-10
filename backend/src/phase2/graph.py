@@ -226,9 +226,15 @@ def find_standard_mapping(G: nx.MultiDiGraph, concept_id: int) -> Optional[dict]
     if concept_id not in G:
         return None
 
-    # Check if already standard
+    # Check if already standard or classification
     node_data = G.nodes[concept_id]
     if node_data.get('standard_concept') == 'S':
+        return get_concept_info(G, concept_id)
+
+    # Classification concepts (C) are valid OMOP hierarchy nodes (e.g., "Blood pressure"
+    # in LOINC, "furosemide Injectable Product" in RxNorm). They don't have "Maps to"
+    # edges, only hierarchy edges (Subsumes, Is a). Accept them as valid mappings.
+    if node_data.get('standard_concept') == 'C':
         return get_concept_info(G, concept_id)
 
     # Follow mapping relationships to find standard concept

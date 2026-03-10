@@ -33,7 +33,8 @@ class Phase1Request(BaseModel):
 
 class ConceptSchema(BaseModel):
     """Extracted medical concept."""
-    text: str = Field(description="Concept text")
+    text: str = Field(description="Concept text (normalized English)")
+    original_text: Optional[str] = Field(default=None, description="Original text from clinical document")
     domain: str = Field(description="OMOP domain (Condition, Drug, etc)")
     value: Optional[float] = Field(default=None, description="Measurement value")
     unit: Optional[str] = Field(default=None, description="Measurement unit")
@@ -58,7 +59,8 @@ class Phase2Request(BaseModel):
 
 class MappingSchema(BaseModel):
     """OMOP concept mapping."""
-    input: str = Field(description="Input concept text")
+    input: str = Field(description="Input concept text (normalized English)")
+    original_text: Optional[str] = Field(default=None, description="Original text from clinical document")
     domain: str = Field(description="OMOP domain")
     match_name: Optional[str] = Field(default=None, description="Best match concept name")
     match_id: Optional[int] = Field(default=None, description="Match concept ID")

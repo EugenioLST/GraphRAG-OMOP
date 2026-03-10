@@ -14,7 +14,8 @@ DomainType = Literal["Condition", "Drug", "Procedure", "Measurement", "Observati
 
 class MedicalConcept(BaseModel):
     """A single medical concept extracted from clinical text."""
-    text: str = Field(description="The medical term (e.g., 'systolic blood pressure', 'metformin')")
+    text: str = Field(description="The medical term in English clinical terminology (e.g., 'systolic blood pressure', 'metformin')")
+    original_text: str = Field(description="The exact text as it appears in the clinical document before translation or expansion (e.g., 'PA sistólica', 'eGFR')")
     domain: DomainType = Field(description="OMOP domain classification")
     value: Optional[Union[float, str]] = Field(default=None, description="Numeric value if applicable (e.g., 150 for BP, 1000 for drug dose)")
     unit: Optional[str] = Field(default=None, description="Unit if applicable (e.g., 'mmHg', 'mg')")

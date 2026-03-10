@@ -1,7 +1,7 @@
 # GraphRAG-OMOP — Next Steps
 
 Estado actual: Pipeline funcional end-to-end (Phase 1: LLM extraction → Phase 2: FAISS + Graph mapping → Dashboard).
-Este documento recoge las mejoras pendientes priorizadas tras las primeras pruebas.
+Este documento recoge las mejoras identificadas, decisiones tomadas, y cambios implementados.
 
 ---
 
@@ -16,123 +16,149 @@ Este documento recoge las mejoras pendientes priorizadas tras las primeras prueb
 
 ---
 
-## Mejoras priorizadas
+## Cambios implementados
 
-### P1 — Soporte multiidioma (español → inglés)
-**Prioridad: CRÍTICA** | Esfuerzo: bajo
+### P1 — Soporte multiidioma (español → inglés) ✅
+**Archivo**: `backend/src/phase1/prompts.py` (Regla 9)
 
-**Problema**: SapBERT está entrenado en UMLS (inglés). Textos en español producen scores bajos y matches incorrectos. El prompt de Phase 1 no especifica idioma de salida.
+**Problema**: SapBERT está entrenado en UMLS (inglés). Textos en español producen scores bajos y matches incorrectos.
 
-**Solución**: Añadir al prompt de Phase 1 (`backend/src/phase1/prompts.py`) una regla para que GPT-4 extraiga siempre los conceptos en inglés clínico, independientemente del idioma del texto de entrada. No añade coste (la traducción ocurre dentro de la misma llamada LLM).
+**Solución**: Regla en el prompt de Phase 1 para que GPT-4 extraiga siempre en inglés clínico, independientemente del idioma de entrada. Sin coste extra (traducción dentro de la misma llamada LLM).
 
-**Cambio**: Añadir en la sección Rules del prompt:
+---
+
+### P2 — Abreviaturas clínicas mal resueltas ✅
+**Archivo**: `backend/src/phase1/prompts.py` (Regla 10)
+
+**Problema**: "eGFR" → "Epidermal growth factor measurement" (score 0.728). SapBERT no entiende abreviaturas, mapea por similitud de texto literal.
+
+**Solución**: Regla en el prompt para que GPT-4 expanda abreviaturas a su forma completa (eGFR → "estimated glomerular filtration rate", HbA1c → "hemoglobin A1c", etc.).
+
+---
+
+### P5 — Conceptos de Clasificación (`C`) sin mapeo estándar ✅
+**Archivo**: `backend/src/phase2/graph.py` (`find_standard_mapping`)
+
+**Problema**: Conceptos como "Blood pressure" (LOINC 1003132), "Heart rate" (LOINC 45876226), "furosemide Injectable Product" (RxNorm 36225444) tienen `standard_concept = "C"` (Classification). Son nodos de jerarquía que no tienen aristas "Maps to" — solo "Subsumes", "Is a", "Has ingredient". `find_standard_mapping()` no los manejaba y devolvía `None` → REVIEW innecesario con scores perfectos.
+
+**Investigación realizada**:
+- Verificado en datos reales: estos conceptos `C` solo tienen aristas jerárquicas
+- Existen 85K conceptos `C` en el grafo (vs 2.5M `S` y 1.25M sin estándar)
+- Sí existen LOINC `S` para blood pressure (320) y heart rate (94), pero son ultra-específicos
+- Distribución: `S` = 2,516,863 | `NaN` = 1,253,210 | `C` = 85,377
+
+**Solución demo**: Aceptar conceptos `C` como válidos — son conceptos OMOP reales y reconocibles clínicamente.
+
+**Solución futura** (no implementada): Para producción, navegar "Subsumes" hacia abajo para LOINC `C` → LOINC `S`, o "Has ingredient" para RxNorm `C` → RxNorm `S`.
+
+---
+
+### P6 — Campo `original_text` en todo el pipeline ✅
+**Archivos**: 6 archivos modificados (ver tabla abajo)
+
+**Problema**: Phase 1 normaliza y traduce conceptos (español → inglés, abreviaturas → forma completa), pero el texto original del documento clínico se perdía. El dashboard solo mostraba el concepto normalizado, sin contexto de dónde venía.
+
+**Solución**: Nuevo campo `original_text` que captura la mención exacta del texto clínico (e.g., "DM tipo 2", "eGFR", "PA sistólica"). Fluye desde Phase 1 hasta el frontend:
+
+| Archivo | Cambio |
+|---|---|
+| `backend/src/phase1/schema.py` | Campo `original_text: str` en `MedicalConcept` |
+| `backend/src/phase1/prompts.py` | Regla 11: incluir `original_text` con texto exacto del documento |
+| `backend/schemas.py` | Campo `original_text: Optional[str]` en `ConceptSchema` y `MappingSchema` |
+| `backend/routers/phase2.py` | Pass-through de `original_text` + logging cuando difiere del input |
+| `frontend/lib/types.ts` | Campo `original_text` en `ExtractedConcept` y `ConceptMapping` |
+| `frontend/components/ConceptRow.tsx` | Muestra transformación `"original" → "normalizado"` en vista expandida |
+
+---
+
+## Decisiones tomadas (no implementar)
+
+### P3 — Matches semánticos débiles
+**Decisión**: Dejar como está.
+
+"bilateral basal crackles" → "Bilateral pneumonia" (score 0.625) es un match incorrecto, pero el umbral de 0.7 ya lo captura como REVIEW. El sistema hace bien su trabajo: "no estoy seguro, revísalo". Subir el umbral podría generar falsos REVIEW en conceptos que sí matchean bien. Para demo, tener algunos REVIEW demuestra que el sistema sabe cuándo no está seguro.
+
+### P4 — Conceptos duplicados de Phase 1
+**Decisión**: No es un bug.
+
+"blood pressure" aparece 2 veces (sistólica 150 mmHg y diastólica 95 mmHg) porque en OMOP CDM son dos mediciones distintas con concept_ids diferentes. Lo mismo con "metformin" 2 veces (850 mg actual y 1000 mg nueva dosis). Es comportamiento correcto.
+
+---
+
+## Resumen de cambios por archivo
+
+| Archivo | Cambio | Motivo |
+|---|---|---|
+| `backend/src/phase1/prompts.py` | Regla 9: extraer en inglés | SapBERT solo entiende inglés |
+| `backend/src/phase1/prompts.py` | Regla 10: expandir abreviaturas | "eGFR" → match incorrecto |
+| `backend/src/phase1/prompts.py` | Regla 11: incluir `original_text` | Mostrar transformación texto original → normalizado |
+| `backend/src/phase1/schema.py` | Campo `original_text` en `MedicalConcept` | Capturar mención original del documento |
+| `backend/schemas.py` | `original_text` en `ConceptSchema` y `MappingSchema` | Transportar campo por la API |
+| `backend/routers/phase2.py` | Pass-through + logging de `original_text` | Pasar campo de Phase 1 a respuesta |
+| `backend/src/phase2/graph.py` | Aceptar `standard_concept == "C"` | LOINC/RxNorm Classification sin "Maps to" |
+| `frontend/lib/types.ts` | `original_text` en interfaces TS | Tipado para el frontend |
+| `frontend/components/ConceptRow.tsx` | Mostrar `"original" → "normalizado"` | UX: ver transformación en vista expandida |
+
+---
+
+## Mejoras futuras (post-demo)
+
+| Mejora | Descripción | Complejidad |
+|---|---|---|
+| Navegación jerárquica `C` → `S` | Para LOINC: bajar por "Subsumes" al `S` más relevante. Para RxNorm: seguir "Has ingredient" | Alta |
+| Fallback sin filtro de dominio | Si score con filtro es bajo, reintentar búsqueda sin filtro | Media |
+| Validación por palabras clave | Si match_name no comparte palabras con input, marcar REVIEW | Media |
+| Deduplicación visual | Agrupar en frontend por standard_id cuando hay múltiples valores | Baja |
+
+---
+
+## Problemática: Normalización pre-SapBERT
+
+### El problema
+
+SapBERT (`cambridgeltl/SapBERT-from-PubMedBERT-fulltext`) tiene dos limitaciones clave:
+- **No entiende español** (ni otros idiomas): entrenado exclusivamente en UMLS (inglés). Términos como "hipertensión arterial" o "glucosa en sangre" producen matches incorrectos o scores bajos.
+- **No resuelve todas las abreviaturas**: algunas como "DM" (diabetes mellitus) funcionan bien (score 0.90) porque son ubicuas en UMLS, pero otras como "eGFR" fallan (matchea "Epidermal growth factor" con 0.728).
+
+Esto implica que los conceptos **deben llegar normalizados a inglés clínico formal** antes de la búsqueda semántica en FAISS.
+
+### Solución actual (1 modelo, 1 paso)
+
+GPT-4 hace extracción + normalización en una sola llamada:
+- Regla 9: traduce a inglés clínico
+- Regla 10: expande abreviaturas
+- Regla 11: preserva `original_text` para trazabilidad
+
+**Ventajas**: eficiente (1 llamada LLM), sin coste extra, funciona bien.
+**Riesgo**: el LLM podría alterar el significado al normalizar (bajo riesgo con GPT-4, pero posible).
+
+### Alternativa futura (2 modelos o 2 pasos)
+
+Separar extracción de normalización:
 ```
-- ALWAYS output concept names in English clinical terminology, regardless of the input language
-- Example: "hipertensión arterial" → extract as "hypertension"
+Texto clínico → [Modelo 1: extrae tal cual] → conceptos crudos
+                                                  ↓
+                                  [Modelo 2 o lookup: normaliza] → conceptos para SapBERT
 ```
 
-**Archivos**: `backend/src/phase1/prompts.py`
+**Opciones para el paso de normalización**:
+- Otra llamada LLM (más coste y latencia)
+- Diccionario/lookup de abreviaturas (rápido, pero limitado a casos conocidos)
+- Modelo ligero de normalización médica (BERT fine-tuned)
 
----
+**Cuándo tiene sentido**: si se cambia SapBERT por un modelo multilingüe que entienda abreviaturas, la normalización se podría desactivar sin tocar Phase 1. El campo `original_text` ya prepara esta separación.
 
-### P2 — Measurements LOINC sin mapeo estándar
-**Prioridad: ALTA** | Esfuerzo: medio
+### Decisión actual
 
-**Problema**: Conceptos como "blood pressure" (LOINC 1003132), "heart rate" (LOINC 45876226) obtienen score 1.0 del RAG pero `find_standard_mapping()` no encuentra concepto estándar → caen en REVIEW innecesariamente.
-
-**Causa raíz**: `find_standard_mapping()` en `backend/src/phase2/graph.py` busca relaciones "Maps to", "Non-standard to Standard map (OMOP)" y "Concept replaced by". Los conceptos LOINC encontrados no tienen estas aristas en el grafo, o los targets no tienen `standard_concept == 'S'`.
-
-**Investigación necesaria**:
-1. Verificar qué aristas tienen los nodos LOINC en el grafo (qué relationship types)
-2. En OMOP CDM, LOINC **es** el vocabulario estándar para Measurements — quizá hay que reconocer esto directamente
-3. Verificar si el edges.csv tiene las relaciones de mapeo LOINC o si se perdieron en el preprocesamiento
-
-**Posibles soluciones**:
-- (a) Ampliar los relationship types que busca `find_standard_mapping()`
-- (b) Si un concepto LOINC del dominio Measurement ya tiene `standard_concept == 'S'`, aceptarlo directamente
-- (c) Revisar el script de preprocesamiento para asegurar que incluye las relaciones "Maps to" de LOINC
-
-**Archivos**: `backend/src/phase2/graph.py`, posiblemente `data/processed/edges.csv`
-
----
-
-### P3 — Abreviaturas clínicas mal resueltas
-**Prioridad: ALTA** | Esfuerzo: bajo
-
-**Problema**: "eGFR" se mapea a "Epidermal growth factor measurement" (score 0.728) en vez de "estimated Glomerular Filtration Rate". Error clínico grave. El score 0.728 pasa el umbral de 0.7, así que no salta REVIEW.
-
-**Causa raíz**: SapBERT genera embeddings del texto literal. "eGFR" como string se parece más a "EGF" (epidermal growth factor) que a "estimated glomerular filtration rate".
-
-**Solución**: Añadir al prompt de Phase 1 una regla para expandir abreviaturas a su forma clínica completa. GPT-4 sabe que eGFR = "estimated glomerular filtration rate". Sin coste extra.
-
-**Cambio**: Añadir en la sección Rules del prompt:
-```
-- ALWAYS expand clinical abbreviations to their full form
-- Example: "eGFR" → extract as "estimated glomerular filtration rate"
-- Example: "HbA1c" → extract as "hemoglobin A1c"
-- Example: "BP" → extract as "blood pressure"
-```
-
-**Archivos**: `backend/src/phase1/prompts.py`
-
----
-
-### P4 — Matches semánticos débiles (hallazgos físicos)
-**Prioridad: MEDIA** | Esfuerzo: medio
-
-**Problema**: "bilateral basal crackles" → "Bilateral pneumonia" (score 0.625). El match es incorrecto (crackles = hallazgo de auscultación, no diagnóstico). El score bajo lo marca como REVIEW (correcto), pero el match sugerido puede confundir al revisor.
-
-**Causa raíz**: El vocabulario OMOP puede no tener un concepto exacto para "crackles". SapBERT se agarra a "bilateral" como señal semántica compartida.
-
-**Posibles mejoras**:
-- (a) Subir el umbral de REVIEW de 0.7 a 0.75
-- (b) Implementar fallback: si el score con filtro de dominio es bajo, reintentar sin filtro de dominio
-- (c) Añadir un segundo nivel de validación: si el match_name no comparte palabras clave con el input, marcar como REVIEW incluso con score alto
-
-**Archivos**: `backend/src/phase2/retrieve.py` (umbral en `search_and_standardize`)
-
----
-
-### P5 — Furosemide Injectable sin estándar
-**Prioridad: MEDIA** | Esfuerzo: depende de P2
-
-**Problema**: "intravenous furosemide" → "furosemide Injectable Product" (RxNorm 36225444, score 0.916) pero `STANDARD: None`.
-
-**Causa raíz**: Mismo patrón que P2 — el concepto RxNorm encontrado no tiene relación "Maps to" hacia un concepto estándar en el grafo. Probablemente se resuelve junto con P2.
-
-**Nota**: El concepto RxNorm "furosemide Injectable Product" puede ser un concepto de clasificación (no prescripción). El estándar sería un Clinical Drug como "furosemide 10 MG/ML Injectable Solution".
-
----
-
-### P6 — Conceptos duplicados de Phase 1
-**Prioridad: BAJA** | Esfuerzo: bajo
-
-**Problema**: Phase 1 extrae "blood pressure" 2 veces (sistólica y diastólica), "metformin" 2 veces (dosis actual y nueva). Genera mapeos duplicados en Phase 2.
-
-**Nota**: No es realmente un bug — GPT-4 extrae correctamente cada mención con su valor/unidad. Los duplicados tienen valores diferentes (150 mmHg vs 95 mmHg, 850 mg vs 1000 mg).
-
-**Posible mejora** (opcional):
-- Deduplicar en frontend agrupando por concept + standard_id
-- O añadir lógica de merge post-Phase 2 que agrupe mapeos idénticos
-
-**Archivos**: Frontend o `backend/routers/phase2.py`
-
----
-
-## Orden de implementación sugerido
-
-| # | Fix | Esfuerzo | Impacto | Resuelve |
-|---|-----|----------|---------|----------|
-| 1 | Prompt: inglés + expandir abreviaturas | ~5 min | Alto | P1 + P3 |
-| 2 | Investigar LOINC en grafo + ajustar mapeo | ~30 min | Alto | P2 + P5 |
-| 3 | Ajustar umbral / fallback sin filtro dominio | ~15 min | Medio | P4 |
-| 4 | Deduplicación en frontend (opcional) | ~15 min | Bajo | P6 |
+Mantener extracción + normalización juntas en Phase 1 (GPT-4). Es la solución más eficiente para el pipeline actual con SapBERT.
 
 ---
 
 ## Notas técnicas
 
-- **SapBERT** (`cambridgeltl/SapBERT-from-PubMedBERT-fulltext`): Modelo de embeddings entrenado en UMLS. Fuerte en inglés, débil en otros idiomas y abreviaturas.
-- **FAISS IVF**: Índice con 256 clusters, nprobe=10. Búsqueda ~99% precisa vs brute-force.
-- **Graph**: NetworkX MultiDiGraph con ~3.8M nodos y relaciones OMOP. Traversal via "Maps to" para encontrar estándar.
-- **Umbral actual**: score < 0.7 → REVIEW
+- **SapBERT** (`cambridgeltl/SapBERT-from-PubMedBERT-fulltext`): Embeddings entrenados en UMLS. 768 dimensiones. Fuerte en inglés, débil en otros idiomas y abreviaturas.
+- **FAISS IVF**: Índice con 256 clusters, nprobe=10. Búsqueda ~99% precisa vs brute-force. Thread-safe para lectura.
+- **Graph**: NetworkX MultiDiGraph. ~3.8M nodos, relaciones OMOP. Traversal via "Maps to" / "Non-standard to Standard map (OMOP)".
+- **standard_concept values**: `S` = Standard (2,516,863) | `C` = Classification (85,377) | `NaN` = Non-standard (1,253,210)
+- **Relationship types en el grafo**: Standard/Non-standard map, Has dose form, Subsumes/Is a, Tradename of, Has ingredient, Concept replaced by, Contains, Has form, Has basic dose form
+- **Umbral REVIEW**: score < 0.7

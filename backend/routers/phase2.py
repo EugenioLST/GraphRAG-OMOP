@@ -67,9 +67,10 @@ async def search_and_map(request: Phase2Request):
                 domain=concept.domain
             )
 
-            # Add value and unit (pass-through from Phase 1)
+            # Add value, unit, and original_text (pass-through from Phase 1)
             result['value'] = concept.value
             result['unit'] = concept.unit
+            result['original_text'] = concept.original_text
 
             return result
 
@@ -96,6 +97,8 @@ async def search_and_map(request: Phase2Request):
             logger.info(f"")
             logger.info(f"--- Concept {i}/{len(mappings)} {status_icon} [{m['status']}] ---")
             logger.info(f"  INPUT:      \"{m['input']}\" (domain: {m['domain']})")
+            if m.get('original_text') and m['original_text'] != m['input']:
+                logger.info(f"  ORIGINAL:   \"{m['original_text']}\"")
             if m.get('value') or m.get('unit'):
                 logger.info(f"  VALUE:      {m.get('value', '')} {m.get('unit', '')}")
 

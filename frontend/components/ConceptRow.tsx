@@ -81,6 +81,16 @@ export function ConceptRow({ mapping }: ConceptRowProps) {
             <div className="py-4 px-6 space-y-4">
               <h4 className="font-semibold text-sm">Mapping Details</h4>
 
+              {/* Original Text Transformation */}
+              {mapping.original_text && mapping.original_text !== mapping.input && (
+                <div className="text-sm bg-muted/50 rounded-md px-3 py-2">
+                  <span className="text-muted-foreground">Original:</span>{" "}
+                  <span className="font-medium">&quot;{mapping.original_text}&quot;</span>
+                  <span className="mx-2 text-muted-foreground">&rarr;</span>
+                  <span className="font-medium">&quot;{mapping.input}&quot;</span>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4 text-sm">
                 {/* Match Information */}
                 <div className="space-y-2">

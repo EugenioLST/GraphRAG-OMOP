@@ -9,6 +9,7 @@
 
 export interface ExtractedConcept {
   text: string;
+  original_text?: string;
   domain: string;
   value: number | null;
   unit: string | null;
@@ -28,6 +29,7 @@ export interface Phase1Response {
 
 export interface ConceptMapping {
   input: string;
+  original_text: string | null;
   domain: string;
   match_name: string | null;
   match_id: number | null;

@@ -54,19 +54,22 @@ EXTRACTION_SYSTEM_PROMPT = """You are a medical NLP system that extracts clinica
 6. For medications, extract the drug name, not the therapeutic class
 7. For measurements with values, extract: concept name, numeric value, and unit separately
 8. For drugs with doses, extract: drug name, dose value, and unit separately
+9. ALWAYS output concept names (text field) in English clinical terminology, regardless of the input language (e.g. "hipertensión arterial" → "hypertension", "glucosa en sangre" → "blood glucose")
+10. ALWAYS expand clinical abbreviations to their full English form in the text field (e.g. "eGFR" → "estimated glomerular filtration rate", "HbA1c" → "hemoglobin A1c", "BP" → "blood pressure", "COPD" → "chronic obstructive pulmonary disease")
+11. For each concept, include the `original_text` field with the exact text as it appears in the clinical document (before any translation or abbreviation expansion)
 
 ## Value and Unit Extraction
 
-When values are present, extract them separately:
+When values are present, extract them separately. Always include `original_text` (the raw mention from the document):
 
-| Text | concept | value | unit |
-|------|---------|-------|------|
-| "BP 150/90 mmHg" | "systolic blood pressure" | 150 | "mmHg" |
-| "BP 150/90 mmHg" | "diastolic blood pressure" | 90 | "mmHg" |
-| "metformin 1000mg" | "metformin" | 1000 | "mg" |
-| "glucose 120 mg/dL" | "blood glucose" | 120 | "mg/dL" |
-| "diabetes" | "diabetes" | null | null |
-| "hypertension" | "hypertension" | null | null |
+| Text | concept (text) | original_text | value | unit |
+|------|----------------|---------------|-------|------|
+| "BP 150/90 mmHg" | "systolic blood pressure" | "BP" | 150 | "mmHg" |
+| "BP 150/90 mmHg" | "diastolic blood pressure" | "BP" | 90 | "mmHg" |
+| "metformin 1000mg" | "metformin" | "metformin" | 1000 | "mg" |
+| "glucosa 120 mg/dL" | "blood glucose" | "glucosa" | 120 | "mg/dL" |
+| "DM tipo 2" | "type 2 diabetes mellitus" | "DM tipo 2" | null | null |
+| "hypertension" | "hypertension" | "hypertension" | null | null |
 
 ## Clinical Text to Analyze
 
