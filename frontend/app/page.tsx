@@ -12,6 +12,7 @@ import { ProcessingStatus } from "@/components/ProcessingStatus";
 import { ExtractedConceptsPreview } from "@/components/ExtractedConceptsPreview";
 import { SummaryStats } from "@/components/SummaryStats";
 import { ResultsTable } from "@/components/ResultsTable";
+import { TimelineView } from "@/components/TimelineView";
 import { Separator } from "@/components/ui/separator";
 import { extractConcepts, mapConcepts } from "@/lib/api";
 import type {
@@ -29,6 +30,7 @@ export default function DashboardPage() {
 
   // Input
   const [inputText, setInputText] = useState("");
+  const [referenceDate, setReferenceDate] = useState("");
 
   // Processing state
   const [processingStage, setProcessingStage] = useState<ProcessingStage>("idle");
@@ -69,7 +71,7 @@ export default function DashboardPage() {
     try {
       // Phase 1: Extract concepts
       setProcessingStage("phase1");
-      const phase1Result = await extractConcepts(inputText);
+      const phase1Result = await extractConcepts(inputText, referenceDate || undefined);
       setExtractedConcepts(phase1Result.concepts);
 
       // Short delay to show Phase 1 results
@@ -131,6 +133,8 @@ export default function DashboardPage() {
             onProcess={handleProcess}
             isProcessing={isProcessing}
             isDisabled={!isBackendReady}
+            referenceDate={referenceDate}
+            onReferenceDateChange={setReferenceDate}
           />
 
           {/* Processing Status */}
@@ -166,6 +170,9 @@ export default function DashboardPage() {
                 mappedOk={mappingResults.stats.mapped_ok}
                 needsReview={mappingResults.stats.needs_review}
               />
+
+              {/* Patient Journey Timeline */}
+              <TimelineView mappings={mappingResults.mappings} />
 
               {/* Results Table */}
               <ResultsTable mappings={mappingResults.mappings} />

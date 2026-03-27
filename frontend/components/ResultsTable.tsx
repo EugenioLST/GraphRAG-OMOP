@@ -61,12 +61,12 @@ export function ResultsTable({ mappings }: ResultsTableProps) {
 
     // Apply sorting
     filtered.sort((a, b) => {
-      let aValue: string | number = a[sortField];
-      let bValue: string | number = b[sortField];
+      let aValue: string | number = a[sortField] ?? "";
+      let bValue: string | number = b[sortField] ?? "";
 
       if (sortField === "score") {
-        aValue = a.score;
-        bValue = b.score;
+        aValue = a.score ?? 0;
+        bValue = b.score ?? 0;
       } else if (sortField === "input") {
         aValue = a.input.toLowerCase();
         bValue = b.input.toLowerCase();

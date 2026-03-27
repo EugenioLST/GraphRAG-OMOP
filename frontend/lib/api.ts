@@ -90,12 +90,15 @@ export async function checkBackendStatus(): Promise<BackendStatus> {
  * @param text - Clinical text in any language
  * @returns Extracted concepts with domains
  */
-export async function extractConcepts(text: string): Promise<Phase1Response> {
+export async function extractConcepts(text: string, referenceDate?: string): Promise<Phase1Response> {
   if (!text || text.trim().length === 0) {
     throw new ApiError("Clinical text cannot be empty");
   }
 
   const request: Phase1Request = { text };
+  if (referenceDate) {
+    request.reference_date = referenceDate;
+  }
 
   const response = await fetch(`${API_BASE_URL}/phase1`, {
     method: "POST",

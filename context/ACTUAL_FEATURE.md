@@ -401,3 +401,216 @@ Crear un dashboard visual con Next.js + TypeScript para demos en vivo con médic
 - Plan detallado: `context/DASHBOARD_PLAN.md`
 - Setup guide: (pending) `DASHBOARD_SETUP.md`
 - Demo guide: (pending) `DASHBOARD_DEMO_GUIDE.md`
+
+---
+
+## 🕐 FEATURE: Temporal Detection + Patient Journey Timeline
+
+### Objetivo
+Extraer información temporal de cada concepto médico en Phase 1 y visualizar un timeline tipo "patient journey" en el dashboard.
+
+### Estado
+✅ **IMPLEMENTED** — All 14 steps completed, frontend builds successfully
+
+---
+
+### 1. Contexto y Motivación
+
+El pipeline actual extrae conceptos médicos y los mapea a OMOP, pero **no captura cuándo ocurrió cada evento**. Para una demo clínica efectiva, se necesita:
+- Saber que "diabetes" fue diagnosticada en 2019
+- Que "metformina" se inició en enero 2024
+- Que "disnea" es actual
+
+Esto permite mostrar un **patient journey**: una línea temporal visual con eventos médicos distribuidos cronológicamente.
+
+### 2. Decisiones de Diseño
+
+| Decisión | Elección | Motivo |
+|---|---|---|
+| Granularidad temporal | Variable ("2024", "2024-03", "2024-03-15") | No inventar precisión que no existe en el texto |
+| Fecha de referencia | Auto-detectada por GPT-4, fallback: input del usuario o fecha actual | Necesaria para resolver "hace 3 meses" |
+| Asociación concepto-fecha | Solo si es explícita en el texto | Evitar asociaciones incorrectas |
+| Sin fecha | `null` (no inventar) | Honestidad > completitud |
+| Visualización | CSS/Tailwind puro, sin librería de charts | Sin dependencias nuevas (RULES.md §6) |
+
+### 3. Plan de Implementación
+
+#### Paso 1: Backend Schema Phase 1
+**Archivo:** `backend/src/phase1/schema.py`
+**Tiempo estimado:** 5 min
+
+Añadir campos temporales a `MedicalConcept` y `reference_date` a `ExtractionResult`:
+
+```python
+class MedicalConcept(BaseModel):
+    # ... campos existentes ...
+    date: Optional[str] = Field(default=None, description="ISO date: YYYY, YYYY-MM, or YYYY-MM-DD")
+    date_original: Optional[str] = Field(default=None, description="Original temporal expression from text")
+
+class ExtractionResult(BaseModel):
+    reference_date: Optional[str] = Field(default=None, description="Document reference date YYYY-MM-DD")
+    concepts: List[MedicalConcept] = Field(default_factory=list)
+```
+
+#### Paso 2: Backend Prompt Phase 1
+**Archivo:** `backend/src/phase1/prompts.py`
+**Tiempo estimado:** 20 min
+
+- Añadir placeholder `{reference_date}` al prompt
+- Añadir reglas 12-15 de extracción temporal
+- Añadir tabla de ejemplos temporales
+- Regla clave: solo asociar fecha si es explícita, null si no hay info temporal
+
+#### Paso 3: Backend Extractor
+**Archivo:** `backend/src/phase1/extractor.py`
+**Tiempo estimado:** 10 min
+
+- `extract_medical_entities()` acepta `reference_date` opcional
+- Fallback a `datetime.now().strftime("%Y-%m-%d")` si no se provee
+- Pasar `reference_date` a `chain.invoke()`
+
+#### Paso 4: Backend Main Phase 1
+**Archivo:** `backend/src/phase1/main.py`
+**Tiempo estimado:** 5 min
+
+- `run_extraction()` acepta y pasa `reference_date`
+
+#### Paso 5: Backend API Schemas
+**Archivo:** `backend/schemas.py`
+**Tiempo estimado:** 10 min
+
+- `Phase1Request`: añadir `reference_date: Optional[str]`
+- `Phase1Response`: añadir `reference_date: Optional[str]`
+- `ConceptSchema`: añadir `date`, `date_original`
+- `MappingSchema`: añadir `date`, `date_original`
+
+#### Paso 6: Backend Router Phase 1
+**Archivo:** `backend/routers/phase1.py`
+**Tiempo estimado:** 5 min
+
+- Pasar `request.reference_date` a `run_extraction()`
+
+#### Paso 7: Backend Router Phase 2
+**Archivo:** `backend/routers/phase2.py`
+**Tiempo estimado:** 5 min
+
+- Pass-through de `date` y `date_original` en `process_concept()`
+
+#### Paso 8: Frontend Types
+**Archivo:** `frontend/lib/types.ts`
+**Tiempo estimado:** 10 min
+
+- Añadir `date`, `date_original` a `ExtractedConcept` y `ConceptMapping`
+- Añadir `reference_date` a `Phase1Request` y `Phase1Response`
+- Añadir `DOMAIN_DOT_COLORS` para los dots del timeline
+
+#### Paso 9: Frontend API Client
+**Archivo:** `frontend/lib/api.ts`
+**Tiempo estimado:** 10 min
+
+- `extractConcepts()` acepta `referenceDate?: string`
+- Incluir en request body si está presente
+
+#### Paso 10: Frontend InputSection
+**Archivo:** `frontend/components/InputSection.tsx`
+**Tiempo estimado:** 15 min
+
+- Añadir props: `referenceDate`, `onReferenceDateChange`
+- Añadir `<input type="date">` nativo con botón Clear
+- Texto: "Document date (optional): If empty, auto-detected from text"
+
+#### Paso 11: Frontend TimelineView (NUEVO)
+**Archivo:** `frontend/components/TimelineView.tsx`
+**Tiempo estimado:** 45 min
+
+Componente de timeline horizontal puro CSS/Tailwind:
+- Agrupa eventos por fecha, ordena cronológicamente
+- Pills coloreados por dominio (reutiliza DOMAIN_COLORS)
+- Tooltips con detalles (shadcn Tooltip existente)
+- Scroll horizontal si hay muchos puntos (`overflow-x-auto`)
+- Sección "Sin fecha" para conceptos sin temporalidad
+- Envuelto en Card de shadcn
+
+#### Paso 12: Frontend Page.tsx
+**Archivo:** `frontend/app/page.tsx`
+**Tiempo estimado:** 10 min
+
+- Estado: `referenceDate`
+- Pasar a InputSection y a `extractConcepts()`
+- Insertar `<TimelineView>` entre SummaryStats y ResultsTable
+
+#### Paso 13: Frontend CSV Export
+**Archivo:** `frontend/lib/csv-export.ts`
+**Tiempo estimado:** 5 min
+
+- Añadir columnas "Date" y "Date Original"
+
+#### Paso 14: Frontend ConceptRow
+**Archivo:** `frontend/components/ConceptRow.tsx`
+**Tiempo estimado:** 5 min
+
+- Mostrar fecha en vista expandida si existe
+
+### 4. Archivos a Crear/Modificar
+
+| Archivo | Acción | Líneas estimadas |
+|---|---|---|
+| `backend/src/phase1/schema.py` | Modificar | +6 |
+| `backend/src/phase1/prompts.py` | Modificar | +40 |
+| `backend/src/phase1/extractor.py` | Modificar | +5 |
+| `backend/src/phase1/main.py` | Modificar | +3 |
+| `backend/schemas.py` | Modificar | +8 |
+| `backend/routers/phase1.py` | Modificar | +2 |
+| `backend/routers/phase2.py` | Modificar | +4 |
+| `frontend/lib/types.ts` | Modificar | +15 |
+| `frontend/lib/api.ts` | Modificar | +8 |
+| `frontend/components/InputSection.tsx` | Modificar | +20 |
+| **`frontend/components/TimelineView.tsx`** | **CREAR** | ~200 |
+| `frontend/app/page.tsx` | Modificar | +10 |
+| `frontend/lib/csv-export.ts` | Modificar | +4 |
+| `frontend/components/ConceptRow.tsx` | Modificar | +8 |
+
+**Total:** 13 archivos modificados + 1 archivo nuevo
+
+### 5. Tests Necesarios
+
+| Test | Tipo | Descripción |
+|---|---|---|
+| Temporal extraction con fechas absolutas | Expected | "diagnosticado en 2019" → date="2019" |
+| Temporal extraction con fechas relativas | Expected | "hace 3 meses" → date calculada |
+| Conceptos sin fecha | Edge case | "tiene hipertensión" → date=null |
+| Granularidad variable | Edge case | "2024" vs "2024-03" vs "2024-03-15" |
+| Texto sin ninguna fecha | Edge case | Todos los conceptos con date=null |
+| Reference date fallback | Edge case | Sin fecha de referencia → usa fecha actual |
+| Pass-through Phase 2 | Integration | date/date_original llegan al frontend |
+| Timeline con mezcla dated/undated | UI | Ambas secciones se renderizan |
+| Timeline vacío (sin fechas) | Edge case | Componente no se renderiza |
+| CSV export con fechas | Expected | Columnas Date y Date Original presentes |
+
+**Verificación end-to-end:**
+1. Reiniciar backend
+2. Probar: "Paciente diagnosticado de DM tipo 2 en 2019. En enero 2024 inicia metformina 850mg. Actualmente presenta disnea."
+3. Verificar: timeline muestra 2019, 2024-01, fecha actual
+4. Verificar: conceptos sin fecha en sección separada
+5. Verificar: CSV exporta columnas temporales
+
+### 6. Estimación de Tiempo
+
+| Bloque | Tiempo |
+|---|---|
+| Backend schemas + prompt (pasos 1-7) | 1 hora |
+| Frontend types + API + InputSection (pasos 8-10) | 35 min |
+| TimelineView nuevo componente (paso 11) | 45 min |
+| Page.tsx + CSV + ConceptRow (pasos 12-14) | 20 min |
+| Testing y ajustes | 30 min |
+| **Total estimado** | **~3 horas** |
+
+### 7. Riesgos y Mitigaciones
+
+| Riesgo | Probabilidad | Mitigación |
+|---|---|---|
+| GPT-4 asocia mal fecha↔concepto | Media | Regla 15: solo asociar si es explícito |
+| Fechas relativas mal calculadas | Baja | Ejemplos claros en prompt + date_original para verificar |
+| Prompt más largo → más tokens/coste | Inevitable | ~200 tokens extra, insignificante |
+| Timeline horizontal overflow | Baja | `overflow-x-auto` con scroll |
+| Backward compatibility | Nula | Todos los campos son Optional/nullable |

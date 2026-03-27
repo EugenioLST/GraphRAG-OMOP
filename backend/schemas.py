@@ -29,6 +29,7 @@ class StatusResponse(BaseModel):
 class Phase1Request(BaseModel):
     """Phase 1 extraction request."""
     text: str = Field(description="Clinical text to analyze", min_length=1)
+    reference_date: Optional[str] = Field(default=None, description="Optional reference date (YYYY-MM-DD) for resolving relative temporal expressions")
 
 
 class ConceptSchema(BaseModel):
@@ -38,10 +39,13 @@ class ConceptSchema(BaseModel):
     domain: str = Field(description="OMOP domain (Condition, Drug, etc)")
     value: Optional[float] = Field(default=None, description="Measurement value")
     unit: Optional[str] = Field(default=None, description="Measurement unit")
+    date: Optional[str] = Field(default=None, description="ISO date (YYYY, YYYY-MM, or YYYY-MM-DD)")
+    date_original: Optional[str] = Field(default=None, description="Original temporal expression from document")
 
 
 class Phase1Response(BaseModel):
     """Phase 1 extraction response."""
+    reference_date: Optional[str] = Field(default=None, description="Detected or provided reference date")
     concepts: List[ConceptSchema] = Field(description="Extracted concepts")
 
 
@@ -73,6 +77,8 @@ class MappingSchema(BaseModel):
     note: Optional[str] = Field(default=None, description="Review note")
     value: Optional[float] = Field(default=None, description="Measurement value")
     unit: Optional[str] = Field(default=None, description="Measurement unit")
+    date: Optional[str] = Field(default=None, description="ISO date (YYYY, YYYY-MM, or YYYY-MM-DD)")
+    date_original: Optional[str] = Field(default=None, description="Original temporal expression from document")
 
 
 class StatsSchema(BaseModel):

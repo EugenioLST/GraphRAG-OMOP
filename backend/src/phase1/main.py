@@ -25,12 +25,13 @@ if sys.platform == 'win32':
 from .extractor import extract_medical_entities, visual_json, save_entities
 
 
-def run_extraction(clinical_text: str, save_output: bool = False) -> dict:
+def run_extraction(clinical_text: str, reference_date: str = None, save_output: bool = False) -> dict:
     """
     Run Phase 1 extraction on clinical text.
 
     Args:
         clinical_text: The clinical text to analyze
+        reference_date: Optional reference date (YYYY-MM-DD) for resolving relative temporal expressions
         save_output: Whether to save results to file
 
     Returns:
@@ -45,7 +46,7 @@ def run_extraction(clinical_text: str, save_output: bool = False) -> dict:
     print("-" * 40)
 
     print("\nExtracting concepts with GPT-4...")
-    result = extract_medical_entities(clinical_text)
+    result = extract_medical_entities(clinical_text, reference_date=reference_date)
 
     # Display results
     print("\n" + "=" * 70)

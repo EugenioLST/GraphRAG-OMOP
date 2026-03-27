@@ -1,3 +1,65 @@
+# TASKS.md — Feature Implementation Log
+
+---
+
+## Feature: Temporal Detection + Patient Journey Timeline
+
+**Date:** 2026-03-19
+**Status:** COMPLETED
+
+### What was implemented
+
+Phase 1 (GPT-4 extraction) now detects temporal information for each medical concept, and the frontend displays a visual patient journey timeline.
+
+### Backend changes (7 files)
+
+| File | Change |
+|---|---|
+| `backend/src/phase1/schema.py` | Added `date`, `date_original` to `MedicalConcept`; `reference_date` to `ExtractionResult` |
+| `backend/src/phase1/prompts.py` | Added rules 12-14: temporal extraction, reference date, temporal association. Added `{reference_date}` placeholder and examples table |
+| `backend/src/phase1/extractor.py` | `extract_medical_entities()` accepts `reference_date`, defaults to today, passes to chain |
+| `backend/src/phase1/main.py` | `run_extraction()` passes `reference_date` through |
+| `backend/schemas.py` | `reference_date` in Phase1Request/Response; `date`, `date_original` in ConceptSchema and MappingSchema |
+| `backend/routers/phase1.py` | Passes `request.reference_date` to `run_extraction()` |
+| `backend/routers/phase2.py` | Pass-through of `date` and `date_original` from Phase 1 concepts to mapping results |
+
+### Frontend changes (7 files, 1 new)
+
+| File | Change |
+|---|---|
+| `frontend/lib/types.ts` | `date`, `date_original` on ExtractedConcept/ConceptMapping; `reference_date` on Phase1Request/Response; `DOMAIN_DOT_COLORS` constant |
+| `frontend/lib/api.ts` | `extractConcepts()` accepts optional `referenceDate` parameter |
+| `frontend/components/InputSection.tsx` | Added date picker for optional document reference date |
+| **`frontend/components/TimelineView.tsx`** | **NEW** — Horizontal patient journey timeline (CSS/Tailwind, no chart library) |
+| `frontend/app/page.tsx` | Wired `referenceDate` state, passes to InputSection and extractConcepts, renders TimelineView |
+| `frontend/lib/csv-export.ts` | Added "Date" and "Date Original" columns |
+| `frontend/components/ConceptRow.tsx` | Shows temporal info in expanded row details |
+| `frontend/components/ResultsTable.tsx` | Fixed type narrowing for nullable sort fields |
+
+### How it works
+
+1. User enters clinical text (optionally sets a document reference date)
+2. Phase 1 (GPT-4) extracts concepts WITH temporal info: `date` (ISO, variable granularity), `date_original` (verbatim expression), `reference_date` (auto-detected or user-provided)
+3. Phase 2 passes temporal fields through unchanged
+4. TimelineView renders horizontal timeline with domain-colored pills, tooltips, and undated events section
+5. CSV export includes Date and Date Original columns
+
+### Design decisions
+
+- Variable granularity: YYYY / YYYY-MM / YYYY-MM-DD — never invents precision
+- Null when unknown: no temporal info → both fields null
+- Explicit association only: only link date to concept if explicitly stated in text
+- No new dependencies: pure CSS/Tailwind + existing shadcn tooltips
+- All fields Optional: fully backward compatible
+
+### Validation
+
+- [x] Frontend builds successfully (`next build`)
+- [x] Backend schemas validate (Pydantic)
+- [ ] End-to-end test (requires running backend with FAISS index)
+
+---
+
 ### TASK CLAVE PARA EL FUTURO (no borrar, cualquier texto que generes, arriba de esto)
 
 La clave para evaular este proyecto es evaluar los embeddings. Son los que generan los vectores, luego la búsqueda es matemática.

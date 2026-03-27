@@ -13,13 +13,17 @@ export interface ExtractedConcept {
   domain: string;
   value: number | null;
   unit: string | null;
+  date: string | null;
+  date_original: string | null;
 }
 
 export interface Phase1Request {
   text: string;
+  reference_date?: string;
 }
 
 export interface Phase1Response {
+  reference_date: string | null;
   concepts: ExtractedConcept[];
 }
 
@@ -42,6 +46,8 @@ export interface ConceptMapping {
   note: string | null;
   value: number | null;
   unit: string | null;
+  date: string | null;
+  date_original: string | null;
 }
 
 export interface Phase2Request {
@@ -104,6 +110,15 @@ export const DOMAIN_COLORS: Record<string, string> = {
   Procedure: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   Observation: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
   Device: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
+};
+
+export const DOMAIN_DOT_COLORS: Record<string, string> = {
+  Drug: "bg-blue-500",
+  Condition: "bg-red-500",
+  Measurement: "bg-purple-500",
+  Procedure: "bg-green-500",
+  Observation: "bg-yellow-500",
+  Device: "bg-gray-500",
 };
 
 // ============================================================================

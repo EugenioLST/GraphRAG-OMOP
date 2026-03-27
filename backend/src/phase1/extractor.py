@@ -12,6 +12,7 @@ import sys
 import json
 from typing import List, Dict, Optional
 from pathlib import Path
+from datetime import datetime
 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -74,13 +75,21 @@ def prompt():
 
 
 def extract_medical_entities(clinical_text: str,
+                             reference_date: Optional[str] = None,
                              source: str = "openai",
                              temperature: float = 0.0) -> Dict:
+    # Reason: reference_date is needed for resolving relative temporal expressions ("hace 3 meses")
+    if reference_date is None:
+        reference_date = datetime.now().strftime("%Y-%m-%d")
+
     llm = get_llm(source, temperature)
     parser = create_parser()
     extraction_prompt = prompt()
     chain = extraction_prompt | llm | parser
-    result = chain.invoke({"clinical_text": clinical_text})
+    result = chain.invoke({
+        "clinical_text": clinical_text,
+        "reference_date": reference_date
+    })
     return result.model_dump(exclude_none=False)
 
 

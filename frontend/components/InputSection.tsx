@@ -17,6 +17,8 @@ interface InputSectionProps {
   onProcess: () => void;
   isProcessing: boolean;
   isDisabled: boolean;
+  referenceDate: string;
+  onReferenceDateChange: (date: string) => void;
 }
 
 const EXAMPLES = [
@@ -43,6 +45,8 @@ export function InputSection({
   onProcess,
   isProcessing,
   isDisabled,
+  referenceDate,
+  onReferenceDateChange,
 }: InputSectionProps) {
   const [loadingExample, setLoadingExample] = useState<number | null>(null);
 
@@ -86,6 +90,35 @@ export function InputSection({
           <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">
             {value.length} characters
           </div>
+        </div>
+
+        {/* Reference Date (Optional) */}
+        <div className="flex items-center gap-3">
+          <label htmlFor="reference-date" className="text-sm font-medium whitespace-nowrap">
+            Document date (optional):
+          </label>
+          <input
+            id="reference-date"
+            type="date"
+            value={referenceDate}
+            onChange={(e) => onReferenceDateChange(e.target.value)}
+            disabled={isDisabled || isProcessing}
+            className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          />
+          {referenceDate && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onReferenceDateChange("")}
+              disabled={isDisabled || isProcessing}
+              className="h-8 px-2 text-xs"
+            >
+              Clear
+            </Button>
+          )}
+          <span className="text-xs text-muted-foreground">
+            If empty, auto-detected from text or today&apos;s date
+          </span>
         </div>
 
         {/* Example Buttons */}

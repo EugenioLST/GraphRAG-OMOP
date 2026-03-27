@@ -28,6 +28,8 @@ export function generateCSV(mappings: ConceptMapping[]): string {
     "Note",
     "Value",
     "Unit",
+    "Date",
+    "Date Original",
   ];
 
   // CSV Rows
@@ -45,6 +47,8 @@ export function generateCSV(mappings: ConceptMapping[]): string {
     escapeCSV(m.note || ""),
     m.value?.toString() || "",
     escapeCSV(m.unit || ""),
+    escapeCSV(m.date || ""),
+    escapeCSV(m.date_original || ""),
   ]);
 
   // Combine headers and rows

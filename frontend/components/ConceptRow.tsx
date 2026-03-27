@@ -115,6 +115,21 @@ export function ConceptRow({ mapping }: ConceptRowProps) {
                 </div>
               </div>
 
+              {/* Temporal Information */}
+              {mapping.date && (
+                <div className="pt-2 border-t">
+                  <p className="font-medium text-sm text-muted-foreground mb-1">Temporal</p>
+                  <p className="text-sm">
+                    <span className="font-medium">Date:</span> {mapping.date}
+                    {mapping.date_original && (
+                      <span className="ml-2 text-muted-foreground">
+                        (from &quot;{mapping.date_original}&quot;)
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
+
               {/* Review Note */}
               {mapping.note && (
                 <div className="pt-2 border-t">

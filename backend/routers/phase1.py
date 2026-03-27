@@ -41,7 +41,7 @@ async def extract_concepts(request: Phase1Request):
         logger.info(f"📝 Phase 1 request: {len(request.text)} chars")
 
         # Call existing function from src.phase1.main
-        result = run_extraction(request.text, save_output=False)
+        result = run_extraction(request.text, reference_date=request.reference_date, save_output=False)
 
         logger.info(f"✅ Phase 1 success: {len(result['concepts'])} concepts")
         return result

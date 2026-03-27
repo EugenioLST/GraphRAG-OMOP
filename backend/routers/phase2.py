@@ -67,10 +67,12 @@ async def search_and_map(request: Phase2Request):
                 domain=concept.domain
             )
 
-            # Add value, unit, and original_text (pass-through from Phase 1)
+            # Add value, unit, original_text, and temporal fields (pass-through from Phase 1)
             result['value'] = concept.value
             result['unit'] = concept.unit
             result['original_text'] = concept.original_text
+            result['date'] = concept.date
+            result['date_original'] = concept.date_original
 
             return result
 
@@ -101,6 +103,8 @@ async def search_and_map(request: Phase2Request):
                 logger.info(f"  ORIGINAL:   \"{m['original_text']}\"")
             if m.get('value') or m.get('unit'):
                 logger.info(f"  VALUE:      {m.get('value', '')} {m.get('unit', '')}")
+            if m.get('date'):
+                logger.info(f"  DATE:       {m['date']} (from: \"{m.get('date_original', '')}\")")
 
             # RAG match (what FAISS found as closest embedding)
             if m.get('match_name'):
