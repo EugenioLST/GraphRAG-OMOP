@@ -33,9 +33,9 @@ const EXAMPLES = [
     description: "Sore throat and fatigue - viral infection",
   },
   {
-    name: "Diabetes Management (Mixed)",
+    name: "Diabetes Journey (Temporal)",
     file: "/examples/example3.txt",
-    description: "Poorly controlled T2DM - treatment adjustment",
+    description: "T2DM con fechas - para probar el timeline",
   },
 ];
 

@@ -1,22 +1,10 @@
-# GraphRAG-OMOP — Next Steps
+# GraphRAG-OMOP — Decisiones de Diseño y Mejoras Futuras
 
-Estado actual: Pipeline funcional end-to-end (Phase 1: LLM extraction → Phase 2: FAISS + Graph mapping → Dashboard).
-Este documento recoge las mejoras identificadas, decisiones tomadas, y cambios implementados.
-
----
-
-## Estado actual del pipeline
-
-### Lo que funciona bien
-- **Conditions** (hypertension, diabetes, chest pain, dyspnea, edema, heart failure): scores >0.92, resolución estándar correcta via SNOMED
-- **Drugs** (enalapril, metformin, liraglutide): scores 1.0, graph traversal SNOMED→RxNorm correcto
-- **Graph traversal**: Cuando FAISS encuentra un concepto SNOMED no-estándar, el grafo resuelve correctamente via "Maps to" / "Non-standard to Standard map (OMOP)"
-- **FAISS**: Búsqueda semántica en milisegundos sobre 3.8M conceptos
-- **Dashboard**: Visualización completa con tabla expandible, export CSV, logs detallados en terminal
+Este documento recoge las decisiones tomadas durante el desarrollo, los problemas encontrados y las mejoras futuras identificadas.
 
 ---
 
-## Cambios implementados
+## Decisiones implementadas
 
 ### P1 — Soporte multiidioma (español → inglés) ✅
 **Archivo**: `backend/src/phase1/prompts.py` (Regla 9)
@@ -85,22 +73,6 @@ Este documento recoge las mejoras identificadas, decisiones tomadas, y cambios i
 
 ---
 
-## Resumen de cambios por archivo
-
-| Archivo | Cambio | Motivo |
-|---|---|---|
-| `backend/src/phase1/prompts.py` | Regla 9: extraer en inglés | SapBERT solo entiende inglés |
-| `backend/src/phase1/prompts.py` | Regla 10: expandir abreviaturas | "eGFR" → match incorrecto |
-| `backend/src/phase1/prompts.py` | Regla 11: incluir `original_text` | Mostrar transformación texto original → normalizado |
-| `backend/src/phase1/schema.py` | Campo `original_text` en `MedicalConcept` | Capturar mención original del documento |
-| `backend/schemas.py` | `original_text` en `ConceptSchema` y `MappingSchema` | Transportar campo por la API |
-| `backend/routers/phase2.py` | Pass-through + logging de `original_text` | Pasar campo de Phase 1 a respuesta |
-| `backend/src/phase2/graph.py` | Aceptar `standard_concept == "C"` | LOINC/RxNorm Classification sin "Maps to" |
-| `frontend/lib/types.ts` | `original_text` en interfaces TS | Tipado para el frontend |
-| `frontend/components/ConceptRow.tsx` | Mostrar `"original" → "normalizado"` | UX: ver transformación en vista expandida |
-
----
-
 ## Mejoras futuras (post-demo)
 
 | Mejora | Descripción | Complejidad |
@@ -152,13 +124,3 @@ Texto clínico → [Modelo 1: extrae tal cual] → conceptos crudos
 
 Mantener extracción + normalización juntas en Phase 1 (GPT-4). Es la solución más eficiente para el pipeline actual con SapBERT.
 
----
-
-## Notas técnicas
-
-- **SapBERT** (`cambridgeltl/SapBERT-from-PubMedBERT-fulltext`): Embeddings entrenados en UMLS. 768 dimensiones. Fuerte en inglés, débil en otros idiomas y abreviaturas.
-- **FAISS IVF**: Índice con 256 clusters, nprobe=10. Búsqueda ~99% precisa vs brute-force. Thread-safe para lectura.
-- **Graph**: NetworkX MultiDiGraph. ~3.8M nodos, relaciones OMOP. Traversal via "Maps to" / "Non-standard to Standard map (OMOP)".
-- **standard_concept values**: `S` = Standard (2,516,863) | `C` = Classification (85,377) | `NaN` = Non-standard (1,253,210)
-- **Relationship types en el grafo**: Standard/Non-standard map, Has dose form, Subsumes/Is a, Tradename of, Has ingredient, Concept replaced by, Contains, Has form, Has basic dose form
-- **Umbral REVIEW**: score < 0.7

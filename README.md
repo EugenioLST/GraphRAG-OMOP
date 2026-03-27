@@ -49,81 +49,92 @@ echo OPENAI_API_KEY=sk-tu-api-key-aqui > .env
 
 ## Datos OMOP
 
-El sistema necesita los CSVs de vocabulario OMOP en `data/source/`:
-- `CONCEPT.csv`
-- `CONCEPT_RELATIONSHIP.csv`
-- `RELATIONSHIP.csv`
+> **Los datos NO están incluidos en el repositorio** (~28 GB). Deben obtenerse o generarse por separado.
 
-Estos archivos se pueden obtener de [OHDSI Athena](https://athena.ohdsi.org/).
+El sistema necesita 3 capas de datos en `backend/data/`:
 
-Si ya tienes los datos preprocesados (`data/processed/nodes.csv`, `data/processed/edges.csv`, `data/embeddings/embeddings.npy`), puedes omitir la generación.
+| Carpeta | Tamaño | Contenido | Cómo obtener |
+|---|---|---|---|
+| `data/source/` | ~3 GB | CSVs originales de OMOP | Descargar de [OHDSI Athena](https://athena.ohdsi.org/) |
+| `data/processed/` | ~2 GB | nodes.csv, edges.csv, omop_graph.pkl | Generar con `python -m src.phase2.preprocess` |
+| `data/embeddings/` | ~23 GB | embeddings.npy, faiss_index.bin, concept_id_to_index.pkl | Generar con `python -m src.phase2.embeddings` |
 
----
+### Opción A: Compartir datos ya generados (recomendado)
 
-## Uso Rápido
+Si alguien del equipo ya tiene los datos generados, copiar la carpeta `backend/data/` completa (OneDrive, disco externo, etc.). Es la forma más rápida.
 
-### Modo Interactivo (Recomendado para empezar)
+### Opción B: Generar desde cero
 
-```bash
-python main.py
-```
-
-Esto abre un menú interactivo donde puedes:
-1. Ejecutar el pipeline completo
-2. Probar solo Phase 1 (extracción)
-3. Probar solo Phase 2 (búsqueda)
-
-### Pipeline Completo con Texto
-
-```bash
-python main.py --text "Paciente de 65 años con diabetes mellitus tipo 2 e hipertensión. Se prescribe metformina 850mg y enalapril 10mg."
-```
-
-**Output esperado:**
-```
-PHASE 1: Clinical Concept Extraction
-=====================================
-Extracted 4 concepts:
-  - diabetes mellitus tipo 2 [Condition]
-  - hipertensión [Condition]
-  - metformina [Drug]
-  - enalapril [Drug]
-
-PHASE 2: Semantic Search for OMOP Standards
-===========================================
-[Condition] diabetes mellitus tipo 2
-  1. [0.772] Maturity onset diabetes of the young, type 2
-     ID: 4130164 | SNOMED
-
-[Drug] metformina
-  1. [0.973] metformin ★
-     ID: 1503297 | RxNorm
-
-[Drug] enalapril
-  1. [1.000] enalapril ★
-     ID: 1341927 | RxNorm
-
-PIPELINE COMPLETE
-```
+1. Descargar vocabularios de [OHDSI Athena](https://athena.ohdsi.org/) y colocar los CSVs en `backend/data/source/`
+   - Vocabularios necesarios: SNOMED, RxNorm, RxNorm Extension, LOINC
+   - Archivos mínimos: `CONCEPT.csv`, `CONCEPT_RELATIONSHIP.csv`, `RELATIONSHIP.csv`
+2. Ejecutar los pasos de generación (ver sección "Generar Datos")
 
 ---
 
-## Comandos por Fase
+## Uso
 
-### Phase 1: Extracción de Conceptos (LLM)
+Hay dos formas de usar el sistema:
+
+### Opción 1: Dashboard web (recomendado para demos)
+
+Levanta el backend (API) y el frontend (dashboard visual) por separado:
 
 ```bash
-# Via main.py
-python main.py --phase1 "Paciente con diabetes tratado con metformina"
+# Terminal 1: Backend (FastAPI)
+cd backend
+python main.py                # Arranca en http://localhost:8000
 
-# Via módulo standalone
-python -m src.phase1.main "Paciente con diabetes tratado con metformina"
-
-# Modo interactivo Phase 1
-python -m src.phase1.main
+# Terminal 2: Frontend (Next.js)
+cd frontend
+npm install                   # Solo la primera vez
+npm run dev                   # Arranca en http://localhost:3000
 ```
 
-**Dominios OMOP soportados:**
+Abre `http://localhost:3000` en el navegador. El dashboard permite:
+- Introducir texto clínico y ver los conceptos extraídos
+- Visualizar el patient journey (timeline temporal)
+- Ver la tabla de mapeo a OMOP con scores
+- Exportar resultados a CSV
+
+### Opción 2: CLI de terminal (rápido para testing)
+
+Sin frontend, directamente desde la terminal:
+
+```bash
+cd backend
+
+# Modo interactivo (menú con opciones)
+python cli.py
+
+# Pipeline completo con texto
+python cli.py --text "Paciente con diabetes tipo 2, toma metformina 850mg"
+
+# Solo Phase 1 (extracción LLM)
+python cli.py --phase1 "Paciente con diabetes tratado con metformina"
+
+# Solo Phase 2 (búsqueda semántica)
+python cli.py --phase2 "metformina"
+```
+
+### Ambas opciones usan el mismo pipeline interno
+
+```
+Texto clínico
+     │
+     ▼
+Phase 1 (GPT-4): extrae conceptos, traduce a inglés, expande abreviaturas, detecta temporalidad
+     │
+     ▼
+Phase 2 (SapBERT + FAISS): búsqueda semántica → grafo OMOP → concepto estándar
+     │
+     ▼
+Resultado: cada concepto mapeado a su código OMOP estándar
+```
+
+---
+
+## Dominios OMOP soportados
 
 | Dominio | Descripción | Ejemplos |
 |---------|-------------|----------|
@@ -133,22 +144,6 @@ python -m src.phase1.main
 | Measurement | Mediciones, valores de laboratorio | glucosa, creatinina, presión arterial |
 | Observation | Observaciones clínicas | fumador, embarazo, dolor nivel 7 |
 | Device | Dispositivos médicos | marcapasos, stent, bomba insulina |
-
-### Phase 2: Búsqueda Semántica OMOP
-
-```bash
-# Via main.py
-python main.py --phase2 "metformina"
-
-# Via módulo standalone
-python -m src.phase2.main "metformina"
-
-# Con opciones
-python -m src.phase2.main "diabetes" --top-k 10 --expand
-
-# Modo interactivo Phase 2
-python -m src.phase2.main
-```
 
 **Opciones de búsqueda:**
 - `--top-k N`: Número de resultados (default: 5)
@@ -163,101 +158,120 @@ python -m src.phase2.main
 
 ```
 GraphRAG-OMOP/
-├── main.py                      # CLI principal (pipeline completo)
 │
-├── src/
-│   ├── phase1/                  # Extracción de conceptos (LLM)
-│   │   ├── main.py              # CLI standalone Phase 1
-│   │   ├── extractor.py         # Lógica de extracción con GPT-4
-│   │   ├── prompts.py           # Prompts para el LLM
-│   │   └── schema.py            # Schemas Pydantic
+├── backend/
+│   ├── main.py                  # Servidor FastAPI (para el frontend)
+│   ├── cli.py                   # CLI de terminal (sin frontend)
+│   ├── config.py                # Configuración y variables de entorno
+│   ├── schemas.py               # Schemas de la API (request/response)
+│   ├── routers/                 # Endpoints API (health, phase1, phase2)
+│   ├── src/
+│   │   ├── phase1/              # Extracción de conceptos (GPT-4)
+│   │   │   ├── extractor.py     # Lógica de extracción con LangChain
+│   │   │   ├── prompts.py       # System prompt para el LLM
+│   │   │   └── schema.py        # Schemas Pydantic de salida
+│   │   │
+│   │   └── phase2/              # Búsqueda semántica (SapBERT + FAISS)
+│   │       ├── retrieve.py      # Motor de búsqueda semántica
+│   │       ├── embeddings.py    # Generación de embeddings
+│   │       ├── graph.py         # Grafo NetworkX OMOP
+│   │       └── preprocess.py    # Preprocesamiento de CSVs OMOP
 │   │
-│   └── phase2/                  # Búsqueda semántica (Embeddings)
-│       ├── main.py              # CLI standalone Phase 2
-│       ├── retrieve.py          # Motor de búsqueda semántica
-│       ├── embeddings.py        # Generación de embeddings SapBERT
-│       ├── graph.py             # Grafo NetworkX OMOP
-│       └── preprocess.py        # Preprocesamiento de CSVs OMOP
-│
-├── data/
-│   ├── source/                  # CSVs originales de OMOP (Athena)
-│   │   ├── CONCEPT.csv          # Conceptos OMOP (~565 MB)
-│   │   ├── CONCEPT_RELATIONSHIP.csv  # Relaciones (~1.7 GB)
-│   │   └── RELATIONSHIP.csv     # Tipos de relación
+│   ├── data/                    # ⚠️ NO incluido en el repo (~28 GB)
+│   │   ├── source/              # CSVs de Athena (descargar)
+│   │   ├── processed/           # Grafo filtrado (generar)
+│   │   └── embeddings/          # Vectores + índice FAISS (generar)
 │   │
-│   ├── processed/               # Archivos procesados
-│   │   ├── nodes.csv            # Conceptos filtrados (3.8M)
-│   │   ├── edges.csv            # Relaciones filtradas (17M)
-│   │   └── omop_graph.pkl       # Grafo cacheado (~2 GB)
-│   │
-│   ├── embeddings/              # Embeddings SapBERT
-│   │   ├── embeddings.npy       # Vectores de embeddings
-│   │   └── concept_id_to_index.pkl  # Mapeo de índices
-│   │
-│   └── output/                  # Salida del pipeline
+│   ├── .env                     # API Keys (no commitear, ver .env.example)
+│   └── requirements.txt         # Dependencias Python
 │
-├── scripts/
-│   ├── validation/              # Scripts de validación
-│   ├── debug/                   # Herramientas de debugging
-│   └── demo/                    # Materiales de demostración
+├── frontend/
+│   ├── app/                     # Next.js pages
+│   ├── components/              # Componentes React (dashboard, timeline, tabla)
+│   ├── lib/                     # API client, types, utilidades
+│   └── package.json             # Dependencias Node.js
 │
-├── context/                     # Documentación del proyecto
-│   ├── ARCHITECTURE.md          # Arquitectura detallada
-│   └── CLAUDE.md                # Contexto para desarrollo
-│
-├── tests/                       # Tests unitarios
-├── requirements.txt             # Dependencias Python
-└── .env                         # API Keys (no commitear)
+└── context/                     # Documentación del proyecto
+    └── ARCHITECTURE.md          # Arquitectura detallada
 ```
 
 ---
 
 ## Generar Datos (Primera vez)
 
-Si no tienes los archivos generados, ejecuta:
+El sistema necesita datos que NO están en el repositorio. Hay que generarlos siguiendo estos 3 pasos en orden:
+
+### Paso 1: Descargar vocabularios OMOP de Athena
+
+1. Ir a [OHDSI Athena](https://athena.ohdsi.org/) y crear una cuenta (gratis)
+2. Seleccionar los vocabularios: **SNOMED**, **RxNorm**, **RxNorm Extension**, **LOINC**
+3. Descargar el ZIP y extraer los CSVs en `backend/data/source/`
+
+Archivos mínimos necesarios:
+- `CONCEPT.csv` (~540 MB) — Todos los conceptos médicos
+- `CONCEPT_RELATIONSHIP.csv` (~1.6 GB) — Relaciones entre conceptos
+- `RELATIONSHIP.csv` (~53 KB) — Tipos de relación
+
+### Paso 2: Preprocesar (generar grafo)
+
+Filtra los CSVs y construye el grafo de relaciones OMOP:
 
 ```bash
-# 1. Preprocesar CSVs OMOP (genera data/processed/nodes.csv, edges.csv)
+cd backend
 python -m src.phase2.preprocess
+```
 
-# 2. Generar embeddings (guarda en data/embeddings/)
-# Opción A: Subset para pruebas rápidas (~10 min)
-python -m src.phase2.embeddings --max-concepts 100000
+Genera en `data/processed/`:
+- `nodes.csv` (~348 MB) — 3.8M conceptos filtrados
+- `edges.csv` (~710 MB) — 17M relaciones filtradas
+- `omop_graph.pkl` (~834 MB) — Grafo NetworkX cacheado
 
-# Opción B: Dataset completo (~4-8 horas CPU, ~1 hora GPU)
+Tiempo: ~10-15 minutos
+
+### Paso 3: Generar embeddings + índice FAISS
+
+Pasa cada concepto por el modelo SapBERT para generar vectores semánticos y construye el índice de búsqueda:
+
+```bash
+# Dataset completo, 3.8M conceptos (~4-8 horas CPU, ~1 hora GPU)
 python -m src.phase2.embeddings
+
+# O subset de 100k para pruebas rápidas (~10 min)
+python -m src.phase2.embeddings --max-concepts 100000
+```
+
+Genera en `data/embeddings/`:
+- `embeddings.npy` (~12 GB) — Vectores de 768 dimensiones por concepto
+- `faiss_index.bin` (~12 GB) — Índice FAISS para búsqueda rápida
+- `concept_id_to_index.pkl` (~37 MB) — Mapeo concept_id → posición
+
+### Resumen del pipeline de datos
+
+```
+Athena (descarga)          preprocess.py              embeddings.py
+    │                          │                           │
+    ▼                          ▼                           ▼
+data/source/  ──────►  data/processed/  ──────►  data/embeddings/
+  ~3 GB                    ~2 GB                     ~23 GB
+  CSVs crudos              Grafo filtrado            Vectores + índice
+  (solo para generar)      (se usa en runtime)       (se usa en runtime)
 ```
 
 ---
 
-## Ejemplos de Uso
-
-### Ejemplo 1: Historia Clínica en Español
+## Ejemplos de Uso (CLI)
 
 ```bash
-python main.py --text "Paciente varón de 58 años con antecedentes de infarto agudo de miocardio. Actualmente en tratamiento con aspirina 100mg, atorvastatina 40mg y bisoprolol 5mg. En la última analítica presenta creatinina elevada."
-```
+cd backend
 
-### Ejemplo 2: Solo Extracción
+# Historia clínica completa
+python cli.py --text "Paciente varón de 58 años con antecedentes de infarto agudo de miocardio. Actualmente en tratamiento con aspirina 100mg, atorvastatina 40mg y bisoprolol 5mg."
 
-```bash
-python main.py --phase1 "El paciente presenta disnea de esfuerzo, edemas en miembros inferiores y se auscultan crepitantes bibasales."
-```
+# Solo extracción (Phase 1)
+python cli.py --phase1 "El paciente presenta disnea de esfuerzo y edemas en miembros inferiores."
 
-### Ejemplo 3: Buscar un Término Específico
-
-```bash
-python main.py --phase2 "myocardial infarction"
-```
-
-### Ejemplo 4: Búsqueda con Filtros
-
-```bash
-# Solo medicamentos estándar
-python -m src.phase2.main "aspirin" --domain Drug --standard-only
-
-# Top 20 resultados con relaciones
-python -m src.phase2.main "diabetes" --top-k 20 --expand
+# Solo búsqueda semántica (Phase 2)
+python cli.py --phase2 "myocardial infarction"
 ```
 
 ---
@@ -288,35 +302,52 @@ python -m src.phase2.main "diabetes" --top-k 20 --expand
 
 ---
 
+## Performance
+
+| Etapa | Tiempo | Notas |
+|-------|--------|-------|
+| Backend startup | ~30s | Carga embeddings + grafo en memoria |
+| Frontend startup | <5s | Compilación Next.js |
+| Phase 1 (Extracción) | 5-10s | Llamada a API GPT-4 |
+| Phase 2 (Mapeo) | 10-15s | SapBERT + FAISS + grafo |
+| **Total por query** | **15-25s** | |
+
 ## Troubleshooting
 
 ### Error: "OPENAI_API_KEY not found"
 ```bash
-# Crear archivo .env con tu API key
-echo OPENAI_API_KEY=sk-tu-key > .env
+# Copiar .env.example y rellenar tu API key
+cp backend/.env.example backend/.env
 ```
 
 ### Error: "Embeddings not found"
 ```bash
-# Generar embeddings (primera vez)
+cd backend
 python -m src.phase2.embeddings --max-concepts 100000
 ```
 
-### Error: "No module named 'langchain_core'"
+### Backend offline o puerto ocupado
 ```bash
-pip install langchain langchain-core langchain-openai
+# Arrancar backend manualmente
+cd backend
+venv\Scripts\activate
+uvicorn main:app --port 8000 --reload
+
+# Si el puerto está ocupado (Windows)
+netstat -ano | findstr :8000
+taskkill /PID <PID> /F
 ```
 
 ### Scores bajos para términos en español
-Los embeddings están optimizados para inglés. Para mejores resultados con español:
-- Usa términos en inglés cuando sea posible
-- O acepta que los scores serán ~10-20% más bajos
+Los embeddings (SapBERT) están optimizados para inglés. Phase 1 traduce automáticamente al extraer, pero algunos términos pueden tener scores ~10-20% más bajos.
 
 ---
 
 ## Testing
 
 ```bash
+cd backend
+
 # Ejecutar todos los tests
 pytest tests/ -v
 

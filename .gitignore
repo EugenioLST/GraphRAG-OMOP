@@ -1,0 +1,17 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Images (reference only, not needed for the project)
+*.png
+*.jpg
+*.jpeg
+
+# Claude Code
+.claude/

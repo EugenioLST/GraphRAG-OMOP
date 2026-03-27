@@ -1,24 +1,22 @@
 """
-main.py - GraphRAG-OMOP Full Pipeline
+cli.py - GraphRAG-OMOP Command Line Interface
 
-ES EL ANTIGUO CLI
-
-Complete pipeline from clinical text to standardized OMOP concepts.
+Pipeline completo desde terminal, sin necesidad de frontend.
 
 Pipeline: Clinical Text → [Phase 1: Extract] → Concepts → [Phase 2: Search] → OMOP Standards
 
 Usage:
     # Full pipeline (interactive)
-    python main.py
+    python cli.py
 
     # Full pipeline with text
-    python main.py --text "Paciente con diabetes tratado con metformina"
+    python cli.py --text "Paciente con diabetes tratado con metformina"
 
     # Phase 1 only (extraction)
-    python main.py --phase1 "Paciente con diabetes tratado con metformina"
+    python cli.py --phase1 "Paciente con diabetes tratado con metformina"
 
     # Phase 2 only (search)
-    python main.py --phase2 "metformina"
+    python cli.py --phase2 "metformina"
 """
 
 import sys
