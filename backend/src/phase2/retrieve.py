@@ -337,8 +337,10 @@ class SemanticRetriever:
                 'note': explanation if REVIEW
             }
         """
-        # Build filters
-        filters = {'domain': domain} if domain else None
+        # Build filters — only search Standard (S) concepts
+        filters = {'standard_only': True}
+        if domain:
+            filters['domain'] = domain
 
         # Step 1: Semantic search (RAG)
         results = self.search(query, top_k=top_k, filters=filters)
@@ -391,7 +393,7 @@ class SemanticRetriever:
             else:
                 status = 'REVIEW'
                 if best_match['standard_concept'] == 'C':
-                    note = f'Classification concept (C) - could not resolve to unique standard'
+                    note = 'Classification concept (C) - too generic, use a more specific term'
                 else:
                     note = 'No standard mapping found'
 

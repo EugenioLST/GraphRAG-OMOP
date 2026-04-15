@@ -55,8 +55,9 @@ EXTRACTION_SYSTEM_PROMPT = """You are a medical NLP system that extracts clinica
 7. For measurements with values, extract: concept name, numeric value, and unit separately
 8. For drugs with doses, extract: drug name, dose value, and unit separately
 9. ALWAYS output concept names (text field) in English clinical terminology, regardless of the input language (e.g. "hipertensión arterial" → "hypertension", "glucosa en sangre" → "blood glucose")
-10. ALWAYS expand clinical abbreviations to their full English form in the text field (e.g. "eGFR" → "estimated glomerular filtration rate", "HbA1c" → "hemoglobin A1c", "BP" → "blood pressure", "COPD" → "chronic obstructive pulmonary disease")
+10. ALWAYS expand clinical abbreviations to their full English form in the text field (e.g. "eGFR" → "estimated glomerular filtration rate", "HbA1c" → "hemoglobin A1c", "COPD" → "chronic obstructive pulmonary disease")
 11. For each concept, include the `original_text` field with the exact text as it appears in the clinical document (before any translation or abbreviation expansion)
+15. PREFER SPECIFIC over generic terms for measurements. "BP 150/90" MUST be split into TWO concepts: "systolic blood pressure" (150 mmHg) and "diastolic blood pressure" (90 mmHg), NEVER "blood pressure". Similarly use "heart rate" (not "pulse"), "body temperature" (not "temperature").
 12. TEMPORAL EXTRACTION: For each concept, extract any temporal information associated with it:
     - `date_original`: the exact temporal expression from the text (e.g., "en 2019", "hace 3 meses", "last March", "el 15/01/2023")
     - `date`: the resolved ISO date with variable granularity — only as precise as the source text allows:
@@ -71,6 +72,7 @@ EXTRACTION_SYSTEM_PROMPT = """You are a medical NLP system that extracts clinica
 13. REFERENCE DATE: The document reference date is {reference_date}. Use this to resolve relative temporal expressions. Also, if you detect a document date in the text (e.g., "Fecha: 15/03/2024", "Consultation date: March 15, 2024"), report it in the `reference_date` field of the output.
 14. TEMPORAL ASSOCIATION: Only associate a date with a concept if the temporal expression clearly refers to that concept in the text. Examples:
     - "Diagnosed with diabetes in 2019, currently on metformin" → diabetes gets date "2019", metformin gets the reference date (currently)
+    - "Actualmente presenta disnea y edemas" → dyspnea AND edema both get the reference date (actualmente applies to both)
     - "Patient has hypertension and diabetes" → both get null (no temporal info)
     - "Started metformin 3 months ago" → metformin gets date resolved from reference date
     - "HTA y DM desde 2015" → both hypertension and diabetes get "2015"
@@ -98,6 +100,8 @@ When values are present, extract them separately. Always include `original_text`
 | "Hace 3 meses dolor torácico" | "chest pain" | "Hace 3 meses" | (calculated from reference date as YYYY-MM) |
 | "Hipertensión arterial" | "hypertension" | null | null |
 | "Currently on aspirin" | "aspirin" | "Currently" | (reference date as YYYY-MM-DD) |
+| "Actualmente presenta disnea" | "dyspnea" | "Actualmente" | (reference date as YYYY-MM-DD) |
+| "Now complains of chest pain" | "chest pain" | "Now" | (reference date as YYYY-MM-DD) |
 
 ## Clinical Text to Analyze
 
