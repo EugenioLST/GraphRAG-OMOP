@@ -400,6 +400,107 @@ class TestFindStandardMapping:
         assert result is None
 
 
+class TestResolveClassificationToStandard:
+    """Test classification (C) to standard (S) resolution via hierarchy"""
+
+    def _build_graph(self, nodes, edges):
+        """Helper to build a small test graph from node/edge lists."""
+        G = nx.MultiDiGraph()
+        for nid, name, std in nodes:
+            G.add_node(nid, concept_name=name, vocabulary_id='SNOMED',
+                       domain_id='Condition', standard_concept=std)
+        for src, tgt, rel in edges:
+            G.add_edge(src, tgt, relationship=rel)
+        return G
+
+    def test_resolves_to_single_standard(self):
+        """C with one S child via Subsumes -> returns S"""
+        G = self._build_graph(
+            nodes=[(1, 'Classification Parent', 'C'), (2, 'Standard Child', 'S')],
+            edges=[(1, 2, 'Subsumes')]
+        )
+        result = graph.find_standard_mapping(G, 1)
+        assert result is not None
+        assert result['concept_id'] == 2
+        assert result['standard_concept'] == 'S'
+        assert result.get('resolved_from_classification') is True
+
+    def test_ambiguous_multiple_standards(self):
+        """C with two S children -> returns None (ambiguous)"""
+        G = self._build_graph(
+            nodes=[
+                (1, 'Classification Parent', 'C'),
+                (2, 'Standard Child A', 'S'),
+                (3, 'Standard Child B', 'S'),
+            ],
+            edges=[(1, 2, 'Subsumes'), (1, 3, 'Subsumes')]
+        )
+        result = graph.find_standard_mapping(G, 1)
+        assert result is None
+
+    def test_no_standard_children(self):
+        """C with only non-standard children -> returns None"""
+        G = self._build_graph(
+            nodes=[
+                (1, 'Classification Parent', 'C'),
+                (2, 'Non-standard Child', None),
+                (3, 'Another Classification', 'C'),
+            ],
+            edges=[(1, 2, 'Subsumes'), (1, 3, 'Subsumes')]
+        )
+        result = graph.find_standard_mapping(G, 1)
+        assert result is None
+
+    def test_resolves_at_depth_2(self):
+        """C -> C -> S at depth 2 -> should resolve"""
+        G = self._build_graph(
+            nodes=[
+                (1, 'Top Classification', 'C'),
+                (2, 'Mid Classification', 'C'),
+                (3, 'Standard Leaf', 'S'),
+            ],
+            edges=[(1, 2, 'Subsumes'), (2, 3, 'Subsumes')]
+        )
+        result = graph.find_standard_mapping(G, 1)
+        assert result is not None
+        assert result['concept_id'] == 3
+
+    def test_respects_max_depth(self):
+        """S concept beyond max_depth -> returns None"""
+        # Chain: C1 -> C2 -> C3 -> C4 -> S5 (depth 4, beyond default max 3)
+        G = self._build_graph(
+            nodes=[
+                (1, 'C1', 'C'), (2, 'C2', 'C'), (3, 'C3', 'C'),
+                (4, 'C4', 'C'), (5, 'S5', 'S'),
+            ],
+            edges=[
+                (1, 2, 'Subsumes'), (2, 3, 'Subsumes'),
+                (3, 4, 'Subsumes'), (4, 5, 'Subsumes'),
+            ]
+        )
+        result = graph.find_standard_mapping(G, 1)
+        assert result is None
+
+    def test_ignores_non_hierarchy_edges(self):
+        """C with S child via non-hierarchy edge -> should not resolve"""
+        G = self._build_graph(
+            nodes=[(1, 'Classification', 'C'), (2, 'Standard', 'S')],
+            edges=[(1, 2, 'Maps to')]  # Not a hierarchy edge
+        )
+        result = graph.find_standard_mapping(G, 1)
+        assert result is None
+
+    def test_has_ingredient_relationship(self):
+        """C with S child via Has ingredient (RxNorm) -> resolves"""
+        G = self._build_graph(
+            nodes=[(1, 'Drug Classification', 'C'), (2, 'Drug Standard', 'S')],
+            edges=[(1, 2, 'Has ingredient (RxNorm)')]
+        )
+        result = graph.find_standard_mapping(G, 1)
+        assert result is not None
+        assert result['concept_id'] == 2
+
+
 class TestLoadGraph:
     """Test full graph loading"""
 

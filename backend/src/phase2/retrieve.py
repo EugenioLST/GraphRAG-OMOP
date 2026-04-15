@@ -386,9 +386,14 @@ class SemanticRetriever:
                 standard_name = standard_info['concept_name']
                 standard_id = standard_info['concept_id']
                 standard_vocab = standard_info['vocabulary_id']
+                if standard_info.get('resolved_from_classification'):
+                    note = f'Resolved from classification concept {best_match["concept_id"]}'
             else:
                 status = 'REVIEW'
-                note = 'No standard mapping found'
+                if best_match['standard_concept'] == 'C':
+                    note = f'Classification concept (C) - could not resolve to unique standard'
+                else:
+                    note = 'No standard mapping found'
 
         # Flag for review if score is low
         if score < 0.7:

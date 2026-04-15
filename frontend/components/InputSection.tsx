@@ -37,6 +37,16 @@ const EXAMPLES = [
     file: "/examples/example3.txt",
     description: "T2DM con fechas - para probar el timeline",
   },
+  {
+    name: "ICU Discharge (English)",
+    file: "/examples/example4.txt",
+    description: "Complex HFrEF, CKD, AFib, DM2 - 15+ meds",
+  },
+  {
+    name: "Neumonia + EPOC (Spanish)",
+    file: "/examples/example5.txt",
+    description: "NAC grave, EPOC, DM2, IRC - informe de alta",
+  },
 ];
 
 export function InputSection({
@@ -124,7 +134,7 @@ export function InputSection({
         {/* Example Buttons */}
         <div className="space-y-2">
           <p className="text-sm font-medium">Pre-loaded Examples:</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-2">
             {EXAMPLES.map((example, index) => (
               <Button
                 key={index}

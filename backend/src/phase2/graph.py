@@ -18,6 +18,7 @@ import pandas as pd
 import networkx as nx
 import pickle
 from typing import Optional
+from collections import deque
 
 
 # File paths
@@ -209,12 +210,97 @@ def get_neighbors(
     return neighbors
 
 
+def _resolve_classification_to_standard(
+    G: nx.MultiDiGraph,
+    classification_concept_id: int,
+    max_depth: int = 3
+) -> Optional[dict]:
+    """
+    Try to navigate down the hierarchy from a Classification (C) concept
+    to find a unique Standard (S) concept.
+
+    Uses BFS following only hierarchy-down relationships (Subsumes, Has ingredient).
+    Returns the S concept if exactly one is found at the shallowest level.
+    Returns None if ambiguous (multiple S at same level) or no S found.
+
+    Args:
+        G: NetworkX graph
+        classification_concept_id: The C concept to resolve
+        max_depth: Maximum BFS depth (default: 3)
+
+    Returns:
+        Dict with standard concept info (with 'resolved_from_classification': True),
+        or None if resolution failed
+    """
+    HIERARCHY_DOWN_RELATIONSHIPS = {
+        'Subsumes',
+        'Has ingredient (RxNorm)',
+        'Has active ingredient (SNOMED)',
+    }
+
+    visited = {classification_concept_id}
+    queue = deque([(classification_concept_id, 0)])
+
+    current_depth_standards = []
+    current_depth_level = -1
+
+    while queue:
+        node_id, depth = queue.popleft()
+
+        if depth >= max_depth:
+            break
+
+        # If we already found S concepts at a shallower depth, stop
+        if current_depth_standards and depth >= current_depth_level:
+            break
+
+        # Explore outgoing hierarchy-down edges
+        for target_id in G.successors(node_id):
+            if target_id in visited:
+                continue
+
+            edges = G.get_edge_data(node_id, target_id)
+            has_hierarchy_edge = False
+            for _, edge_data in edges.items():
+                if edge_data.get('relationship') in HIERARCHY_DOWN_RELATIONSHIPS:
+                    has_hierarchy_edge = True
+                    break
+
+            if not has_hierarchy_edge:
+                continue
+
+            visited.add(target_id)
+            target_data = G.nodes.get(target_id, {})
+
+            if target_data.get('standard_concept') == 'S':
+                if current_depth_level == -1:
+                    current_depth_level = depth + 1
+                current_depth_standards.append(target_id)
+            else:
+                # Continue BFS through non-S nodes
+                if depth + 1 <= max_depth:
+                    queue.append((target_id, depth + 1))
+
+    # Exactly one S concept found -> return it
+    if len(current_depth_standards) == 1:
+        info = get_concept_info(G, current_depth_standards[0])
+        if info:
+            info['resolved_from_classification'] = True
+        return info
+
+    # Zero or multiple -> ambiguous, return None
+    return None
+
+
 def find_standard_mapping(G: nx.MultiDiGraph, concept_id: int) -> Optional[dict]:
     """
     Find the standard concept mapping for a given concept.
 
-    If the concept is already standard, returns its own info.
-    If non-standard, follows 'Maps to' relationships to find standard concept.
+    If the concept is already standard (S), returns its own info.
+    If classification (C), attempts to navigate down the hierarchy
+    (via Subsumes, Has ingredient) to find a unique Standard (S) concept.
+    Returns None if no standard found or if multiple candidates exist (ambiguous).
+    If non-standard (NULL), follows 'Maps to' relationships to find standard concept.
 
     Args:
         G: NetworkX graph
@@ -231,11 +317,13 @@ def find_standard_mapping(G: nx.MultiDiGraph, concept_id: int) -> Optional[dict]
     if node_data.get('standard_concept') == 'S':
         return get_concept_info(G, concept_id)
 
-    # Classification concepts (C) are valid OMOP hierarchy nodes (e.g., "Blood pressure"
-    # in LOINC, "furosemide Injectable Product" in RxNorm). They don't have "Maps to"
-    # edges, only hierarchy edges (Subsumes, Is a). Accept them as valid mappings.
+    # Classification concepts (C) - try to resolve down hierarchy to Standard (S)
     if node_data.get('standard_concept') == 'C':
-        return get_concept_info(G, concept_id)
+        resolved = _resolve_classification_to_standard(G, concept_id)
+        if resolved:
+            return resolved
+        # Could not resolve to a unique S concept
+        return None
 
     # Follow mapping relationships to find standard concept
     # Reason: Non-standard concepts map to standard via mapping relationships
