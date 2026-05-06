@@ -84,7 +84,7 @@ export async function checkBackendStatus(): Promise<BackendStatus> {
 // ============================================================================
 
 /**
- * Extract medical concepts from clinical text using GPT-4
+ * Extract medical concepts from clinical text
  * POST /phase1
  *
  * @param text - Clinical text in any language

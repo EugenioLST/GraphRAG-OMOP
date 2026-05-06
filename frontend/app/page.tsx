@@ -106,7 +106,7 @@ export default function DashboardPage() {
               </p>
             </div>
             <div className="text-right text-sm text-muted-foreground">
-              <p>Powered by GPT-4 + SapBERT</p>
+              <p>Powered by LLM + SapBERT</p>
               <p>OMOP CDM v5.4</p>
             </div>
           </div>

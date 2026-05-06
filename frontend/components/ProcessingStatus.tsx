@@ -19,7 +19,7 @@ const STAGE_INFO = {
   phase1: {
     label: "Stage 1 of 2",
     progress: 25,
-    description: "Extracting medical concepts using GPT-4...",
+    description: "Extracting medical concepts from clinical text...",
     estimatedTime: "~5-10 seconds",
   },
   phase2: {
