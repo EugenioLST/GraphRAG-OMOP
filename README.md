@@ -10,6 +10,20 @@ Texto Clínico → [Phase 1: Extracción LLM] → Conceptos → [Phase 2: Búsqu
 
 ---
 
+## 📚 Entender el proyecto (empieza aquí)
+
+Si abres este repo por primera vez, lee estos tres documentos en orden:
+
+| Documento | Qué explica |
+|---|---|
+| [EXPLICACION_PROBLEMA.md](EXPLICACION_PROBLEMA.md) | **El problema.** Qué resuelve PROTECT-CHILD (WP5) y cómo funciona el motor texto clínico → OMOP. |
+| [PLAN_MEJORAS.md](PLAN_MEJORAS.md) | **Estado, plan y changelog (todo en uno).** Arriba lo que falta (nosotros vs Inetum, construido vs por construir); abajo el histórico de lo hecho. |
+| [FASE1_DISENO_EXTRACCION_INETUM.md](FASE1_DISENO_EXTRACCION_INETUM.md) | **Diseño de extracción.** Cómo debe hacerse la Fase 1 (nota de diseño para Inetum). |
+
+El resto de este README es la guía técnica de instalación y uso.
+
+---
+
 ## Qué hace este sistema
 
 1. **Phase 1 (Extracción)**: Usa GPT-4 para extraer conceptos médicos de texto clínico y clasificarlos por dominio OMOP (Condition, Drug, Procedure, Measurement, Observation, Device)
