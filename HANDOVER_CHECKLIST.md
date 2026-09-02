@@ -6,16 +6,11 @@ Orden recomendado. Cada punto dice qué, dónde y a quién avisar.
 
 ## A. Repo (hacer aquí, en este orden)
 
-- [ ] **Rellenar la versión de Athena** en README, sección "Generar Datos", Paso 1, desde el
-      portátil de trabajo (`backend/data/source/VOCABULARY.csv`, fila `None`, columna `vocabulary_version`).
 - [ ] **Actualizar la URL de clonado** en README, sección "Instalación", cuando exista el proyecto en GitLab.
 
 ## B. Datos (portátil de trabajo)
 
-- [ ] **Copiar `backend/data/` (28 GB) a almacenamiento del grupo.** Preguntar a Eugenio dónde
-      (NAS del LST, OneDrive UPM, disco). Verificar que contiene `source/`, `processed/`
-      (`nodes.csv`, `edges.csv`, `omop_graph.pkl`) y `embeddings/` (`embeddings.npy`,
-      `faiss_index.bin`, `concept_id_to_index.pkl`). Anotar la ruta final en `HANDOVER.md` §2.
+- [ ] Los 28 GB **no se copian**: el sucesor los regenera según el README. Nada que hacer.
 - [ ] **Borrar `backend/.env` del portátil de trabajo** antes de devolverlo. Contiene tu key.
 
 
@@ -42,7 +37,7 @@ git push -u origin main
 
 | A quién | Qué | Cuándo |
 |---|---|---|
-| **Eugenio** | URL GitLab, que es Owner, dónde están los 28 GB, que lea `HANDOVER.md`, confirmar licencia MIT (`LICENSE`) | Al subir a GitLab |
+| **Eugenio** | URL GitLab, que es Owner, que los datos se regeneran (README), que lea `HANDOVER.md`, confirmar licencia MIT (`LICENSE`) | Al subir a GitLab |
 
 ## F. Último día
 

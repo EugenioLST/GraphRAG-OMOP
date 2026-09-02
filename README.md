@@ -62,26 +62,17 @@ cp .env.example .env         # y rellenar OPENAI_API_KEY
 
 ## Datos OMOP
 
-> **Los datos NO están incluidos en el repositorio** (~28 GB). Deben obtenerse o generarse por separado.
+> **Los datos NO están en el repositorio ni en ningún almacenamiento del grupo** (~28 GB).
+> Se generan desde cero siguiendo la sección "Generar Datos". Tiempo total: ~2-3 h con GPU,
+> ~6-10 h solo CPU. Se hace una vez.
 
 El sistema necesita 3 capas de datos en `backend/data/`:
 
-| Carpeta | Tamaño | Contenido | Cómo obtener |
+| Carpeta | Tamaño | Contenido | Cómo se obtiene |
 |---|---|---|---|
-| `data/source/` | ~3 GB | CSVs originales de OMOP | Descargar de [OHDSI Athena](https://athena.ohdsi.org/) |
-| `data/processed/` | ~2 GB | nodes.csv, edges.csv, omop_graph.pkl | Generar con `python -m src.phase2.preprocess` |
-| `data/embeddings/` | ~23 GB | embeddings.npy, faiss_index.bin, concept_id_to_index.pkl | Generar con `python -m src.phase2.embeddings` |
-
-### Opción A: Compartir datos ya generados (recomendado)
-
-Si alguien del equipo ya tiene los datos generados, copiar la carpeta `backend/data/` completa (OneDrive, disco externo, etc.). Es la forma más rápida.
-
-### Opción B: Generar desde cero
-
-1. Descargar vocabularios de [OHDSI Athena](https://athena.ohdsi.org/) y colocar los CSVs en `backend/data/source/`
-   - Vocabularios necesarios: SNOMED, RxNorm, RxNorm Extension, LOINC
-   - Archivos mínimos: `CONCEPT.csv`, `CONCEPT_RELATIONSHIP.csv`, `RELATIONSHIP.csv`
-2. Ejecutar los pasos de generación (ver sección "Generar Datos")
+| `data/source/` | ~3 GB | CSVs originales de OMOP | Descarga manual de [OHDSI Athena](https://athena.ohdsi.org/) (Paso 1) |
+| `data/processed/` | ~2 GB | nodes.csv, edges.csv, omop_graph.pkl | `preprocess` + cache del grafo (Pasos 2 y 3) |
+| `data/embeddings/` | ~23 GB | embeddings.npy, faiss_index.bin, concept_id_to_index.pkl | `embeddings` + `--build-faiss` (Paso 3) |
 
 ---
 
@@ -219,18 +210,23 @@ El sistema necesita datos que NO están en el repositorio. Hay que generarlos si
 
 ### Paso 1: Descargar vocabularios OMOP de Athena
 
+Athena no da enlaces directos: hay que pedir el paquete y esperar un email.
+
 1. Ir a [OHDSI Athena](https://athena.ohdsi.org/) y crear una cuenta (gratis)
-2. Seleccionar los vocabularios: **SNOMED**, **RxNorm**, **RxNorm Extension**, **LOINC**
-3. Descargar el ZIP y extraer los CSVs en `backend/data/source/`
+2. Pestaña **Download**: marcar **SNOMED**, **RxNorm**, **RxNorm Extension** y **LOINC**. Desmarcar el resto para que el ZIP sea más pequeño
+3. Pulsar **Download vocabularies**, dar un nombre al bundle y aceptar la licencia de SNOMED
+4. Esperar el email de Athena con el enlace (minutos u horas). Descargar el ZIP
+5. Extraer los CSVs en `backend/data/source/`
 
-> **Versión de Athena usada para los datos actuales:** `[RELLENAR]` (se lee en
-> `VOCABULARY.csv`, fila `None`, columna `vocabulary_version`). Sin este dato, un
-> `concept_id` de un golden dataset puede no coincidir con una descarga futura.
-
-Archivos mínimos necesarios:
+Archivos mínimos necesarios (el ZIP trae más; los demás se pueden borrar):
 - `CONCEPT.csv` (~540 MB) — Todos los conceptos médicos
 - `CONCEPT_RELATIONSHIP.csv` (~1.6 GB) — Relaciones entre conceptos
 - `RELATIONSHIP.csv` (~53 KB) — Tipos de relación
+
+Son ficheros separados por tabulador aunque la extensión sea `.csv`; `preprocess.py` lo detecta.
+
+Anota la versión descargada (`VOCABULARY.csv`, fila `None`, columna `vocabulary_version`):
+los `concept_id` de un golden dataset solo son comparables contra la misma release.
 
 ### Paso 2: Preprocesar (generar grafo)
 
@@ -251,13 +247,14 @@ python -m src.phase2.preprocess
 Genera en `data/processed/`:
 - `nodes.csv` (~348 MB) — 3.8M conceptos filtrados
 - `edges.csv` (~710 MB) — 17M relaciones filtradas
-- `omop_graph.pkl` (~834 MB) — Grafo NetworkX cacheado
 
-Tiempo: ~10-15 minutos
+Tiempo: ~1 h con el dataset completo. (`omop_graph.pkl` se genera en el Paso 3.)
 
 ### Paso 3: Generar embeddings + índice FAISS
 
-Pasa cada concepto por el modelo SapBERT para generar vectores semánticos y construye el índice de búsqueda:
+Pasa cada concepto por el modelo SapBERT para generar vectores semánticos y construye el índice de búsqueda.
+SapBERT se descarga solo de HuggingFace la primera vez (~440 MB, hace falta internet, sin cuenta).
+Para usar GPU NVIDIA, instalar antes torch con CUDA: `pip install torch --index-url https://download.pytorch.org/whl/cu124`.
 
 ```bash
 # Dataset completo, 3.8M conceptos (~4-8 horas CPU, ~1 hora GPU)
@@ -278,6 +275,9 @@ Genera en `data/embeddings/`:
 - `embeddings.npy` (~12 GB) — Vectores de 768 dimensiones por concepto
 - `faiss_index.bin` (~12 GB) — Índice FAISS para búsqueda rápida
 - `concept_id_to_index.pkl` (~37 MB) — Mapeo concept_id → posición
+
+Y en `data/processed/`:
+- `omop_graph.pkl` (~834 MB) — Grafo NetworkX cacheado (~10 min construirlo)
 
 ### Resumen del pipeline de datos
 

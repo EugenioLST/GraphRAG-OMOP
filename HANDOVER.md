@@ -35,8 +35,7 @@ avanzado en la Fase 1 y acordar el JSON de salida que consumirá `/phase2`.
 
 | Qué                                                                                 | Situación al traspaso                        | Qué hacer                                                                                                                      |
 | ----------------------------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `backend/data/` (28 GB: Athena, `processed/`, `embeddings/` con los 3,8M completos) | No estaba en ningún almacenamiento del grupo | Ruta en el grupo: `[RELLENAR]`. Si no existe, regenerar (README, "Generar Datos"; ~1 h con GPU, 4-8 h CPU, +1 h preprocesado). |
-| Versión de la release de Athena                                                     | No registrada                                | Hueco `[RELLENAR]` en README, Paso 1.                                                                                          |
+| `backend/data/` (28 GB: Athena, `processed/`, `embeddings/`) | No se copia. No existe en ningún almacenamiento del grupo | Regenerar desde cero siguiendo README, "Generar Datos" (~2-3 h con GPU, 6-10 h CPU). Anotar la versión de Athena descargada. |
 | `OPENAI_API_KEY` (`backend/.env`)                                                   | Cuenta personal del autor anterior, revocada | Key propia, o migrar a Ollama (PLAN_MEJORAS §1.3). Sin key el backend ni importa.                                              |
 | Cuenta Athena                                                                       | Personal, no transferible                    | Crear una (gratis).                                                                                                            |
 | SapBERT                                                                             | HuggingFace público, sin cuenta              | Se descarga solo (~440 MB) a `~/.cache/huggingface`.                                                                           |
@@ -76,6 +75,6 @@ como está:
 
 1. Leer los cuatro documentos de la tabla de arriba.
 2. Escribir a Adrián Carrasco antes de tocar código.
-3. Conseguir o regenerar `backend/data/` en una máquina del grupo y arrancar la demo (README).
-4. Rellenar los dos `[RELLENAR]` (ruta de datos aquí, versión de Athena en README).
+3. Regenerar `backend/data/` en una máquina del grupo (README, "Generar Datos") y arrancar la demo.
+4. Rellenar la ruta de los datos en la tabla de §2 cuando existan.
 5. Atacar PLAN_MEJORAS parte 1 en su orden: Fase A primero, que no necesita médico.
