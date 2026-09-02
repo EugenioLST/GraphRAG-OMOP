@@ -9,6 +9,7 @@ sentence-transformers
 numpy
 torch
 scikit-learn
+faiss-cpu
 
 # LangChain for Phase 1 (GPT-4 extraction)
 langchain>=0.1.0

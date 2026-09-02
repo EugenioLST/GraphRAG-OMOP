@@ -64,7 +64,8 @@ start.bat
 
 **Option B: Manual start**
 ```bash
-uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+# o: python main.py
 ```
 
 The server will start and automatically begin loading the grafo in the background (~15-30 seconds).
@@ -351,20 +352,22 @@ This takes ~10-15 minutes for 100k concepts.
 
 ```
 backend/
-├── api.py                      # FastAPI application
-├── pipeline_wrapper.py         # Pipeline manager (singleton)
-├── config.py                   # Configuration settings
-├── main.py                     # Existing pipeline (can run standalone)
+├── main.py                     # FastAPI application (uvicorn main:app)
+├── cli.py                      # Terminal CLI (no frontend needed)
+├── config.py                   # Configuration settings (reads backend/.env)
+├── schemas.py                  # API request/response schemas
+├── routers/                    # health.py, phase1.py, phase2.py
 ├── requirements.txt            # Python dependencies
-├── .env                        # Environment variables
+├── .env                        # Environment variables (copy from .env.example)
 ├── start.bat                   # Startup script (Windows)
 ├── README.md                   # This file
 ├── src/                        # Source code
 │   ├── phase1/                 # GPT-4 extraction
-│   └── phase2/                 # Semantic search
-├── data/                       # Data files
-│   ├── embeddings/             # SapBERT embeddings
-│   ├── processed/              # Processed OMOP data
+│   └── phase2/                 # Semantic search (singleton retriever in phase2/main.py)
+├── data/                       # Data files (NOT in git)
+│   ├── source/                 # Athena CSVs
+│   ├── embeddings/             # SapBERT embeddings + FAISS index
+│   ├── processed/              # nodes.csv, edges.csv, omop_graph.pkl
 │   └── output/                 # Pipeline outputs
 └── venv/                       # Virtual environment
 ```
@@ -375,7 +378,7 @@ backend/
 
 ### Run with auto-reload
 ```bash
-uvicorn api:app --reload --port 8000
+uvicorn main:app --reload --port 8000
 ```
 
 ### View logs
@@ -391,9 +394,8 @@ Open http://localhost:8000/docs for interactive Swagger UI.
 
 ## 🔗 Related Documentation
 
-- Main Dashboard Plan: [../context/DASHBOARD_PLAN.md](../context/DASHBOARD_PLAN.md)
-- Backend Phase Spec: [../context/DASHBOARD_PHASE1_BACKEND.md](../context/DASHBOARD_PHASE1_BACKEND.md)
 - Project README: [../README.md](../README.md)
+- Handover: [../HANDOVER.md](../HANDOVER.md)
 
 ---
 

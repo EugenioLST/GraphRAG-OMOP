@@ -6,10 +6,6 @@ Sistema de **Concept Linking** para vocabulario OMOP que convierte texto clínic
 Texto Clínico → [Phase 1: Extracción LLM] → Conceptos → [Phase 2: Búsqueda Semántica] → OMOP Estándar
 ```
 
-**Autor:** Adolfo Viguera Varea
-
----
-
 ## 📚 Entender el proyecto (empieza aquí)
 
 Si abres este repo por primera vez, lee estos tres documentos en orden:
@@ -19,6 +15,7 @@ Si abres este repo por primera vez, lee estos tres documentos en orden:
 | [EXPLICACION_PROBLEMA.md](EXPLICACION_PROBLEMA.md) | **El problema.** Qué resuelve PROTECT-CHILD (WP5) y cómo funciona el motor texto clínico → OMOP. |
 | [PLAN_MEJORAS.md](PLAN_MEJORAS.md) | **Estado, plan y changelog (todo en uno).** Arriba lo que falta (nosotros vs Inetum, construido vs por construir); abajo el histórico de lo hecho. |
 | [FASE1_DISENO_EXTRACCION_INETUM.md](FASE1_DISENO_EXTRACCION_INETUM.md) | **Diseño de extracción.** Cómo debe hacerse la Fase 1 (nota de diseño para Inetum). |
+| [HANDOVER.md](HANDOVER.md) | **Traspaso.** Contactos, dónde están los datos y las cuentas, decisiones de código que no están en otro sitio. |
 
 El resto de este README es la guía técnica de instalación y uso.
 
@@ -26,7 +23,7 @@ El resto de este README es la guía técnica de instalación y uso.
 
 ## Qué hace este sistema
 
-1. **Phase 1 (Extracción)**: Usa GPT-4 para extraer conceptos médicos de texto clínico y clasificarlos por dominio OMOP (Condition, Drug, Procedure, Measurement, Observation, Device)
+1. **Phase 1 (Extracción)**: Usa `gpt-4o-mini` (OpenAI) para extraer conceptos médicos de texto clínico y clasificarlos por dominio OMOP (Condition, Drug, Procedure, Measurement, Observation, Device)
 
 2. **Phase 2 (Búsqueda Semántica)**: Usa embeddings médicos (SapBERT) para encontrar los conceptos OMOP estándar más similares semánticamente
 
@@ -47,18 +44,20 @@ El resto de este README es la guía técnica de instalación y uso.
 git clone https://github.com/tu-usuario/GraphRAG-OMOP.git
 cd GraphRAG-OMOP
 
-# 2. Crear entorno virtual
+# 2. Crear entorno virtual (dentro de backend/, que es donde está requirements.txt)
+cd backend
 python -m venv venv
 
-# 3. Activar entorno (Windows)
-venv\Scripts\activate
+# 3. Activar entorno
+venv\Scripts\activate        # Windows
+source venv/bin/activate     # Linux/Mac
 
 # 4. Instalar dependencias
 pip install -r requirements.txt
 
 # 5. Configurar API Key de OpenAI
-# Crear archivo .env en la raíz del proyecto:
-echo OPENAI_API_KEY=sk-tu-api-key-aqui > .env
+# El fichero .env va en backend/ (no en la raíz): config.py y extractor.py lo leen de ahí
+cp .env.example .env         # y rellenar OPENAI_API_KEY
 ```
 
 ## Datos OMOP
@@ -197,7 +196,8 @@ GraphRAG-OMOP/
 │   │   └── embeddings/          # Vectores + índice FAISS (generar)
 │   │
 │   ├── .env                     # API Keys (no commitear, ver .env.example)
-│   └── requirements.txt         # Dependencias Python
+│   ├── requirements.txt         # Dependencias Python
+│   └── PDF Extraction.ipynb     # Borrador de Inetum (PDF → Ollama), referencia, no se ejecuta
 │
 ├── frontend/
 │   ├── app/                     # Next.js pages
@@ -205,8 +205,10 @@ GraphRAG-OMOP/
 │   ├── lib/                     # API client, types, utilidades
 │   └── package.json             # Dependencias Node.js
 │
-└── context/                     # Documentación del proyecto
-    └── ARCHITECTURE.md          # Arquitectura detallada
+├── HANDOVER.md                  # Traspaso: estado real, arranque, contactos, pendientes
+├── EXPLICACION_PROBLEMA.md      # Contexto del proyecto
+├── PLAN_MEJORAS.md              # Estado, plan y changelog
+└── FASE1_DISENO_EXTRACCION_INETUM.md
 ```
 
 ---
@@ -221,6 +223,10 @@ El sistema necesita datos que NO están en el repositorio. Hay que generarlos si
 2. Seleccionar los vocabularios: **SNOMED**, **RxNorm**, **RxNorm Extension**, **LOINC**
 3. Descargar el ZIP y extraer los CSVs en `backend/data/source/`
 
+> **Versión de Athena usada para los datos actuales:** `[RELLENAR]` (se lee en
+> `VOCABULARY.csv`, fila `None`, columna `vocabulary_version`). Sin este dato, un
+> `concept_id` de un golden dataset puede no coincidir con una descarga futura.
+
 Archivos mínimos necesarios:
 - `CONCEPT.csv` (~540 MB) — Todos los conceptos médicos
 - `CONCEPT_RELATIONSHIP.csv` (~1.6 GB) — Relaciones entre conceptos
@@ -228,7 +234,14 @@ Archivos mínimos necesarios:
 
 ### Paso 2: Preprocesar (generar grafo)
 
-Filtra los CSVs y construye el grafo de relaciones OMOP:
+Filtra los CSVs y construye el grafo de relaciones OMOP. Qué filtra `preprocess.py`:
+
+- Conceptos: solo los 4 vocabularios de arriba. Conserva estándar (`S`), clasificación (`C`)
+  y no-estándar (nulo). Descarta nombres nulos. Distribución observada: `S` 2.516.863,
+  sin estándar 1.253.210, `C` 85.377.
+- Relaciones: whitelist `RELEVANT_RELATIONSHIPS` (24 tipos: `Is a`/`Subsumes`,
+  `Non-standard to Standard map (OMOP)`, `Concept replaced by`, y las de ingrediente, forma y
+  marca de RxNorm/SNOMED). Ambos extremos deben estar en el conjunto filtrado.
 
 ```bash
 cd backend
@@ -250,9 +263,16 @@ Pasa cada concepto por el modelo SapBERT para generar vectores semánticos y con
 # Dataset completo, 3.8M conceptos (~4-8 horas CPU, ~1 hora GPU)
 python -m src.phase2.embeddings
 
-# O subset de 100k para pruebas rápidas (~10 min)
+# O subset de 100k para pruebas rápidas (~10 min). Son las PRIMERAS 100k filas de nodes.csv, no una muestra
 python -m src.phase2.embeddings --max-concepts 100000
+
+# Índice FAISS (IVF, 256 clusters) y cache del grafo. Si no se generan aquí, se generan
+# solos en el primer arranque del backend, pero tardan y lo bloquean
+python -m src.phase2.embeddings --build-faiss
+python -c "from src.phase2.graph import load_graph; load_graph()"
 ```
+
+**Todas las rutas del backend son relativas a `backend/`.** Ejecuta siempre desde ahí.
 
 Genera en `data/embeddings/`:
 - `embeddings.npy` (~12 GB) — Vectores de 768 dimensiones por concepto
@@ -328,46 +348,27 @@ python cli.py --phase2 "myocardial infarction"
 
 ## Troubleshooting
 
-### Error: "OPENAI_API_KEY not found"
-```bash
-# Copiar .env.example y rellenar tu API key
-cp backend/.env.example backend/.env
-```
-
-### Error: "Embeddings not found"
-```bash
-cd backend
-python -m src.phase2.embeddings --max-concepts 100000
-```
-
-### Backend offline o puerto ocupado
-```bash
-# Arrancar backend manualmente
-cd backend
-venv\Scripts\activate
-uvicorn main:app --port 8000 --reload
-
-# Si el puerto está ocupado (Windows)
-netstat -ano | findstr :8000
-taskkill /PID <PID> /F
-```
-
-### Scores bajos para términos en español
-Los embeddings (SapBERT) están optimizados para inglés. Phase 1 traduce automáticamente al extraer, pero algunos términos pueden tener scores ~10-20% más bajos.
+| Síntoma | Causa probable | Dónde mirar / qué hacer |
+|---|---|---|
+| `ValueError: OPENAI_API_KEY not found` al importar | Falta `backend/.env` o está en la raíz | `cp backend/.env.example backend/.env`. Lo leen `src/phase1/extractor.py:26` y `config.py:30` |
+| `/phase2` devuelve 503 siempre | El grafo no cargó. `/status` **no distingue "cargando" de "falló"** (`grafo_loading` siempre `False`, `error` siempre `None`, `routers/health.py:39-41`) | Busca `❌ Grafo initialization failed` en el log del backend |
+| `FileNotFoundError: data/processed/...` o "Embeddings not found" | Ejecutado fuera de `backend/`, o datos no generados | Rutas relativas en `graph.py:25-27`, `retrieve.py:50-51`, `preprocess.py:23-30`. Generar datos: sección anterior |
+| Arranque de minutos y RAM al máximo | Primera vez: construye `faiss_index.bin` u `omop_graph.pkl` | Generarlos a mano (Paso 3). Después, 15-30 s |
+| Nombres de concepto que no cuadran con el score | `retrieve.py:97` lee `nodes.csv` con `nrows = len(embeddings)`: asume que los embeddings son exactamente las primeras N filas en orden | Regenerar embeddings desde el mismo `nodes.csv` |
+| "eGFR" mapea a "Epidermal growth factor" | SapBERT no entiende abreviaturas | Phase 1 debe expandirlas antes: `src/phase1/prompts.py`, regla 10 |
+| Scores bajos en español | SapBERT es inglés. Phase 1 traduce, pero pierde 10-20% en algunos términos | Esperado |
+| Frontend: "Backend is not available" | Backend en otro puerto/host, o CORS | `frontend/lib/api.ts:16` lee `NEXT_PUBLIC_API_URL`; CORS en `main.py:43` usa `FRONTEND_URL` |
+| Puerto 8000 ocupado (Windows) | Otro proceso | `netstat -ano \| findstr :8000` y `taskkill /PID <PID> /F` |
+| `load_graph(ruta)` ignora la ruta | Bug latente: `retrieve.py:115` pasa la ruta en la posición de `use_cache`. Siempre usa `data/processed/omop_graph.pkl` | `graph.py:368`. Inofensivo mientras no se muevan los datos |
+| Windows: caracteres raros en consola | Falta `sys.stdout.reconfigure(encoding='utf-8')` | Ya está en cada entrypoint; copiar la línea en ficheros nuevos |
 
 ---
 
 ## Testing
 
-```bash
-cd backend
-
-# Ejecutar todos los tests
-pytest tests/ -v
-
-# Tests con coverage
-pytest tests/ --cov=src --cov-report=html
-```
+No hay tests automáticos. Los que había (`backend/tests/`, `backend/_scripts/`) quedaron
+rotos al reorganizar el código en `src/phase2/` y se eliminaron en el traspaso (sept. 2026).
+Validación manual: sección "Testing" de [backend/README.md](backend/README.md).
 
 ---
 
@@ -382,7 +383,7 @@ pytest tests/ --cov=src --cov-report=html
 
 ## Licencia
 
-MIT License - Ver [LICENSE](LICENSE)
+MIT, © Universidad Politécnica de Madrid (LST). Ver [LICENSE](LICENSE).
 
 ## Contribuciones
 

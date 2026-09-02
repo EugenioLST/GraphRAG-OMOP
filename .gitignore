@@ -15,3 +15,18 @@ Thumbs.db
 
 # Claude Code
 .claude/
+
+# Secrets (backend/.gitignore ya cubre .env dentro de backend/; esto cubre la raíz)
+.env
+.env.*
+!.env.example
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Datos OMOP (~28 GB, nunca al repo)
+backend/data/

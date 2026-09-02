@@ -1,8 +1,8 @@
-# PROTECT-CHILD — El problema, y el subproblema que resuelvo (WP5)
+# PROTECT-CHILD — El problema, y el subproblema del LST (WP5)
 
 > Documento de contexto para una persona técnica que no conoce el proyecto.
-> Explica (1) el problema general del proyecto, (2) la pieza concreta que yo
-> aporto en **WP5** —el motor que convierte texto clínico libre en códigos OMOP
+> Explica (1) el problema general del proyecto, (2) la pieza concreta que el LST
+> aporta en **WP5** —el motor que convierte texto clínico libre en códigos OMOP
 > estándar— y (3) los retos abiertos y la hoja de ruta de mejora. La
 > implementación vive en este repositorio (`GraphRAG-OMOP`), en el *backend*.
 
@@ -56,7 +56,7 @@ De aquí sale la necesidad concreta que cubro en **WP5**:
 ### 2.1. Qué resuelve
 
 WP5 es el núcleo de datos del proyecto: limpiar, armonizar y estandarizar los
-datos clínicos al modelo común OMOP/EHDS. Mi contribución concreta es el motor
+datos clínicos al modelo común OMOP/EHDS. La contribución del LST es el motor
 que hace la parte más difícil de eso: **convertir una nota clínica en texto
 libre — en cualquier idioma — en una lista de códigos OMOP estándar, con una
 puntuación de confianza para cada uno.**
@@ -340,7 +340,7 @@ no cambia, solo el backend del modelo).
 - **Problema general:** la IA de PROTECT-CHILD no puede entrenarse hasta que
   todos los hospitales hablen el mismo idioma de datos (OMOP/EHDS), sin mover los
   datos de su sitio.
-- **Lo que aporto en WP5:** un motor que traduce texto clínico libre y
+- **Lo que aporta el LST en WP5:** un motor que traduce texto clínico libre y
   multilingüe a códigos OMOP estándar —con un LLM médico **local** (MedGemma vía
   Ollama) que respeta la premisa federada, búsqueda semántica con SapBERT y
   resolución por grafo OMOP— automatizando el *concept mapping* manual que hoy no

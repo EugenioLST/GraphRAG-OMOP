@@ -33,7 +33,9 @@ npm run dev
 
 ## Complete Setup Guide
 
-See [`../DASHBOARD_QUICKSTART.md`](../DASHBOARD_QUICKSTART.md) for detailed instructions.
+See [`../README.md`](../README.md) (section "Uso") and [`../HANDOVER.md`](../HANDOVER.md).
+
+Backend URL defaults to `http://localhost:8000`; override with `NEXT_PUBLIC_API_URL` in `frontend/.env.local`.
 
 ## Development
 
