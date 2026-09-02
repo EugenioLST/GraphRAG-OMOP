@@ -8,10 +8,6 @@ Orden recomendado. Cada punto dice qué, dónde y a quién avisar.
 
 - [ ] **Actualizar la URL de clonado** en README, sección "Instalación", cuando exista el proyecto en GitLab.
 
-## B. Datos (portátil de trabajo)
-
-- [ ] Los 28 GB **no se copian**: el sucesor los regenera según el README. Nada que hacer.
-- [ ] **Borrar `backend/.env` del portátil de trabajo** antes de devolverlo. Contiene tu key.
 
 
 ## D. GitHub → GitLab (lo hace quien migra)
